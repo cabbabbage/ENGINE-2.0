@@ -69,6 +69,14 @@
 
 namespace {
 
+bool asset_info_has_default_animation_frames(const std::shared_ptr<AssetInfo>& info) {
+    if (!info) {
+        return false;
+    }
+    const auto it = info->animations.find("default");
+    return it != info->animations.end() && it->second.has_frames();
+}
+
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
 constexpr Uint32 kCreateTaskButtonLifetimeMs = 10000;
 constexpr Uint32 kCreateTaskButtonFadeMs = 1500;
@@ -870,6 +878,7 @@ void Assets::load_camera_settings_from_json() {
     }
 
     int fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
+    int max_spawn_from_room = 128;
     if (map_info_json_.contains("live_dynamic_spawns") && map_info_json_["live_dynamic_spawns"].is_object()) {
         const nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
         auto fog_it = live_dynamic.find("fog_near_distance_px");
@@ -884,10 +893,23 @@ void Assets::load_camera_settings_from_json() {
                 fog_near_distance = kDefaultLiveDynamicFogNearDistancePx;
             }
         }
+        auto max_spawn_it = live_dynamic.find("max_spawn_from_room");
+        if (max_spawn_it != live_dynamic.end() && max_spawn_it->is_number()) {
+            try {
+                if (max_spawn_it->is_number_integer()) {
+                    max_spawn_from_room = max_spawn_it->get<int>();
+                } else {
+                    max_spawn_from_room = static_cast<int>(std::lround(max_spawn_it->get<double>()));
+                }
+            } catch (...) {
+                max_spawn_from_room = 128;
+            }
+        }
     }
 
     set_boundary_min_visible_screen_ratio(boundary_ratio);
     set_live_dynamic_fog_near_distance_px(fog_near_distance);
+    set_live_dynamic_max_spawn_from_room_px(max_spawn_from_room);
     set_camera_height_bounds_px(min_height, max_height);
     dynamic_spawn_preload_margin_world_px_ = preload_margin;
     dynamic_spawn_despawn_margin_world_px_ = despawn_margin;
@@ -1178,6 +1200,22 @@ void Assets::set_live_dynamic_fog_near_distance_px(int value, bool persist) {
         live_dynamic = nlohmann::json::object();
     }
     live_dynamic["fog_near_distance_px"] = live_dynamic_fog_near_distance_px_;
+}
+
+int Assets::live_dynamic_max_spawn_from_room_px() const {
+    return live_dynamic_max_spawn_from_room_px_;
+}
+
+void Assets::set_live_dynamic_max_spawn_from_room_px(int value, bool persist) {
+    live_dynamic_max_spawn_from_room_px_ = std::clamp(value, 0, 20000);
+    if (!persist || !map_info_json_.is_object()) {
+        return;
+    }
+    nlohmann::json& live_dynamic = map_info_json_["live_dynamic_spawns"];
+    if (!live_dynamic.is_object()) {
+        live_dynamic = nlohmann::json::object();
+    }
+    live_dynamic["max_spawn_from_room"] = live_dynamic_max_spawn_from_room_px_;
 }
 
 std::pair<int, int> Assets::camera_height_bounds_px() const {
@@ -1738,9 +1776,7 @@ void Assets::run_camera_trap_escape_pass() {
             asset->grid_resolution);
         const world::GridPoint bottom = animation_update::detail::bottom_middle_for(*asset, current);
 
-        int search_radius = (asset->info && asset->info->NeighborSearchRadius > 0)
-            ? asset->info->NeighborSearchRadius
-            : 0;
+        int search_radius = std::min(256, max_impassable_query_radius());
         if (startup_runtime_safety_active(frame_id_)) {
             search_radius = std::min(search_radius, 128);
         }
@@ -3868,6 +3904,16 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
         return nullptr;
     }
 
+    if (!asset_info_has_default_animation_frames(info) && renderer_) {
+        std::unordered_set<std::string> one_asset{name};
+        library_.loadAnimationsFor(renderer_, one_asset);
+    }
+    if (!asset_info_has_default_animation_frames(info)) {
+        vibble::log::warn("[Assets] Cannot spawn asset '" + name +
+                          "': default animation is missing or has no frames after runtime load.");
+        return nullptr;
+    }
+
     std::string owning_room = map_id_;
     if (current_room_) {
         owning_room = current_room_->room_name;
@@ -4560,6 +4606,10 @@ void Assets::destroy_runtime_ui_overlay_texture() {
 }
 
 bool Assets::has_runtime_ui_overlay_content(Uint32 now_ticks) const {
+    const auto& aim_overlay = game_context_.aim_assist_overlay();
+    if (aim_overlay.enabled && aim_overlay.points.size() >= 2) {
+        return true;
+    }
     if (dev_controls_ && dev_controls_->is_enabled()) {
         return true;
     }
@@ -4717,6 +4767,167 @@ void Assets::render_overlays(SDL_Renderer* renderer, SDL_Texture* overlay_target
                 sdl_render::Rect(renderer, &draw_rect);
             }
             SDL_SetRenderDrawBlendMode(renderer, previous_mode);
+        }
+    }
+
+    {
+        const auto& aim_overlay = game_context_.aim_assist_overlay();
+        if (aim_overlay.enabled && renderer && aim_overlay.points.size() >= 2) {
+            struct ProjectedAimPoint {
+                float world_x = 0.0f;
+                float world_y = 0.0f;
+                float world_z = 0.0f;
+                SDL_FPoint screen{0.0f, 0.0f};
+            };
+            auto project_point = [this](float world_x, float world_y, float world_z, SDL_FPoint& out) -> bool {
+                SDL_FPoint screen{};
+                if (!camera_.project_world_point(SDL_FPoint{world_x, world_y}, world_z, screen) ||
+                    !std::isfinite(screen.x) ||
+                    !std::isfinite(screen.y)) {
+                    return false;
+                }
+                out = screen;
+                return true;
+            };
+
+            std::vector<ProjectedAimPoint> projected_points;
+            projected_points.reserve(aim_overlay.points.size());
+            for (const auto& p : aim_overlay.points) {
+                SDL_FPoint projected{};
+                if (project_point(p.world_x, p.world_y, p.world_z, projected)) {
+                    projected_points.push_back(ProjectedAimPoint{
+                        p.world_x,
+                        p.world_y,
+                        p.world_z,
+                        projected
+                    });
+                }
+            }
+
+            if (projected_points.size() >= 2) {
+                const Asset* player = game_context_.player();
+                SDL_FRect player_screen_rect{};
+                const bool has_player_screen_rect =
+                    player && asset_bounds_in_screen_space(player, player_screen_rect);
+                const world::CameraProjectionParams projection = camera_.projection_params();
+                auto world_depth = [&projection](float world_x, float world_y, float world_z) -> std::optional<double> {
+                    const double safe_scale = std::max(1.0e-6, projection.meters_scale);
+                    if (!std::isfinite(safe_scale)) {
+                        return std::nullopt;
+                    }
+                    const double wx = (static_cast<double>(world_x) - projection.anchor_world_x) * safe_scale;
+                    const double wy = (static_cast<double>(world_y) - projection.anchor_world_y) * safe_scale;
+                    const double wz = (static_cast<double>(world_z) - projection.anchor_world_z) * safe_scale;
+                    const double to_x = wx - projection.position_x;
+                    const double to_y = wy - projection.position_y;
+                    const double to_z = wz - projection.position_z;
+                    const double depth =
+                        to_x * projection.forward_x +
+                        to_y * projection.forward_y +
+                        to_z * projection.forward_z;
+                    if (!std::isfinite(depth)) {
+                        return std::nullopt;
+                    }
+                    return depth;
+                };
+                const std::optional<double> player_depth = player
+                    ? world_depth(static_cast<float>(player->world_x()),
+                                  static_cast<float>(player->world_y()),
+                                  static_cast<float>(player->world_z()))
+                    : std::nullopt;
+                auto point_in_player_rect = [&player_screen_rect](const SDL_FPoint& p) -> bool {
+                    return p.x >= player_screen_rect.x &&
+                           p.y >= player_screen_rect.y &&
+                           p.x <= (player_screen_rect.x + player_screen_rect.w) &&
+                           p.y <= (player_screen_rect.y + player_screen_rect.h);
+                };
+                SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+                SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                const SDL_Color col = aim_overlay.is_throw_arc
+                    ? SDL_Color{140, 205, 255, 132}
+                    : SDL_Color{184, 232, 255, 122};
+                SDL_SetRenderDrawColor(renderer, col.r, col.g, col.b, col.a);
+                const float dash_px = aim_overlay.is_throw_arc ? 9.0f : 11.0f;
+                const float gap_px = aim_overlay.is_throw_arc ? 7.0f : 8.0f;
+                const int half_thickness = aim_overlay.is_throw_arc ? 2 : 3;
+                for (std::size_t i = 1; i < projected_points.size(); ++i) {
+                    const ProjectedAimPoint& a = projected_points[i - 1];
+                    const ProjectedAimPoint& b = projected_points[i];
+                    const SDL_FPoint screen_a = a.screen;
+                    const SDL_FPoint screen_b = b.screen;
+                    const float seg_dx = screen_b.x - screen_a.x;
+                    const float seg_dy = screen_b.y - screen_a.y;
+                    const float seg_len = std::sqrt(seg_dx * seg_dx + seg_dy * seg_dy);
+                    if (!std::isfinite(seg_len) || seg_len <= 1.0e-3f) {
+                        continue;
+                    }
+                    const float inv_len = 1.0f / seg_len;
+                    const float dir_x = seg_dx * inv_len;
+                    const float dir_y = seg_dy * inv_len;
+                    const float normal_x = -dir_y;
+                    const float normal_y = dir_x;
+                    float cursor = 0.0f;
+                    while (cursor < seg_len) {
+                        const float dash_end = std::min(seg_len, cursor + dash_px);
+                        const SDL_FPoint d0{screen_a.x + dir_x * cursor, screen_a.y + dir_y * cursor};
+                        const SDL_FPoint d1{screen_a.x + dir_x * dash_end, screen_a.y + dir_y * dash_end};
+                        bool occluded_by_player = false;
+                        if (has_player_screen_rect && player_depth.has_value()) {
+                            constexpr double kDepthEpsilon = 0.02;
+                            const float mid_t = (cursor + dash_end) * 0.5f * inv_len;
+                            const float mid_world_x = a.world_x + (b.world_x - a.world_x) * mid_t;
+                            const float mid_world_y = a.world_y + (b.world_y - a.world_y) * mid_t;
+                            const float mid_world_z = a.world_z + (b.world_z - a.world_z) * mid_t;
+                            const std::optional<double> mid_depth =
+                                world_depth(mid_world_x, mid_world_y, mid_world_z);
+                            const SDL_FPoint mid_screen{
+                                (d0.x + d1.x) * 0.5f,
+                                (d0.y + d1.y) * 0.5f
+                            };
+                            occluded_by_player =
+                                mid_depth.has_value() &&
+                                (mid_depth.value() > player_depth.value() + kDepthEpsilon) &&
+                                point_in_player_rect(mid_screen);
+                        }
+                        if (occluded_by_player) {
+                            cursor += dash_px + gap_px;
+                            continue;
+                        }
+                        for (int t = -half_thickness; t <= half_thickness; ++t) {
+                            const float ox = normal_x * static_cast<float>(t);
+                            const float oy = normal_y * static_cast<float>(t);
+                            SDL_RenderLine(renderer,
+                                           d0.x + ox,
+                                           d0.y + oy,
+                                           d1.x + ox,
+                                           d1.y + oy);
+                        }
+                        cursor += dash_px + gap_px;
+                    }
+                }
+
+                SDL_FPoint nub_screen{};
+                if (project_point(aim_overlay.nub.world_x, aim_overlay.nub.world_y, aim_overlay.nub.world_z, nub_screen)) {
+                    SDL_SetRenderDrawColor(renderer, 220, 245, 255, 165);
+                    constexpr int kNubRadius = 4;
+                    const int cx = static_cast<int>(std::lround(nub_screen.x));
+                    const int cy = static_cast<int>(std::lround(nub_screen.y));
+                    for (int dy = -kNubRadius; dy <= kNubRadius; ++dy) {
+                        const int inside = kNubRadius * kNubRadius - dy * dy;
+                        if (inside < 0) {
+                            continue;
+                        }
+                        const int dx = static_cast<int>(std::floor(std::sqrt(static_cast<float>(inside))));
+                        SDL_RenderLine(renderer,
+                                       static_cast<float>(cx - dx),
+                                       static_cast<float>(cy + dy),
+                                       static_cast<float>(cx + dx),
+                                       static_cast<float>(cy + dy));
+                    }
+                }
+                SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+            }
         }
     }
 

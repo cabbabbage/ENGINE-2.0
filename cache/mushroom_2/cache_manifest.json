@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "4544d9863c331967",
+          "height": 131,
+          "order": 0,
+          "width": 120
+        }
+      ]
+    }
+  ],
+  "asset_name": "mushroom_2",
+  "authored_scale_percentage": 29.0,
+  "crop_canvas": {
+    "shared_height": 131,
+    "shared_width": 120
+  },
+  "digest": "8ef66412e494ae26",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

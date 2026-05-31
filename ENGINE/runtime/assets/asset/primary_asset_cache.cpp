@@ -1,7 +1,6 @@
 #include "primary_asset_cache.hpp"
 
 #include "asset_info.hpp"
-#include "rendering/render/scaling_logic.hpp"
 #include "image_cache_generator.hpp"
 #include "utils/log.hpp"
 

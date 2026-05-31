@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "2c0d89803e3a41cb",
+          "height": 648,
+          "order": 0,
+          "width": 1870
+        }
+      ]
+    }
+  ],
+  "asset_name": "sword",
+  "authored_scale_percentage": 8.0,
+  "crop_canvas": {
+    "shared_height": 648,
+    "shared_width": 1870
+  },
+  "digest": "dcdb031cc42f643e",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

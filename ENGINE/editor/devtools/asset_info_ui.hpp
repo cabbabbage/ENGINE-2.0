@@ -128,7 +128,7 @@ class AssetInfoUI {
     void refresh_loaded_asset_instances(RuntimeRefreshScope scope,
                                         const std::shared_ptr<AssetInfo>& context_info);
     void complete_color_sampling(SDL_Color color);
-    void focus_section(DockableCollapsible* section);
+    void focus_section(DockableCollapsible* section, bool expand_on_focus = true);
     void apply_section_focus_states();
     void clear_section_focus();
     DockableCollapsible* section_at_point(SDL_Point p) const;

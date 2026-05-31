@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "3bdd012bc0b8720d",
+          "height": 477,
+          "order": 0,
+          "width": 332
+        }
+      ]
+    }
+  ],
+  "asset_name": "window_round_large",
+  "authored_scale_percentage": 52.999996185302734,
+  "crop_canvas": {
+    "shared_height": 477,
+    "shared_width": 332
+  },
+  "digest": "d0eefeb1c3f7fb03",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

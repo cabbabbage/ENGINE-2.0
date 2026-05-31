@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -44,6 +45,58 @@ std::filesystem::path project_root_path() {
 #else
     return std::filesystem::current_path();
 #endif
+}
+
+SDL_BlendMode premultiplied_over_blend_mode() {
+    static const SDL_BlendMode mode = SDL_ComposeCustomBlendMode(
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ONE,
+        SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        SDL_BLENDOPERATION_ADD);
+    return mode;
+}
+
+dof_blur_chain::CinematicLensSettings build_cinematic_lens_settings(
+    const WarpedScreenGrid::RealismSettings& camera_settings) {
+    dof_blur_chain::CinematicLensSettings settings{};
+    const auto& lens = camera_settings.lens;
+    settings.enabled = camera_settings.depth_of_field_enabled || lens.enabled;
+    settings.focus_depth_offset = lens.focus_depth_offset;
+    settings.aperture = lens.aperture;
+    settings.focus_falloff_acceleration = lens.focus_falloff_acceleration;
+    settings.max_near_blur_px = lens.max_near_blur_px;
+    settings.max_far_blur_px = lens.max_far_blur_px;
+    settings.near_far_blur_bias = lens.near_far_blur_bias;
+    settings.swirl_strength = lens.swirl_strength;
+    settings.swirl_radius_start = lens.swirl_radius_start;
+    settings.tangential_blur_stretch = lens.tangential_blur_stretch;
+    settings.anamorphic_strength = lens.anamorphic_strength;
+    settings.bokeh_oval_ratio = lens.bokeh_oval_ratio;
+    settings.bokeh_rotation = lens.bokeh_rotation;
+    settings.field_curvature = lens.field_curvature;
+    settings.edge_softness = lens.edge_softness;
+    settings.alpha_clamp_protection = lens.alpha_clamp_protection;
+    settings.alpha_debug_mode = lens.alpha_debug_mode;
+    settings.blur_padding_px = lens.blur_padding_px;
+    settings.sample_count = lens.sample_count;
+    settings.downsample_scale = lens.downsample_scale;
+    settings.quality_preset = lens.quality_preset;
+    return settings;
+}
+
+render_depth::LensBlurDepthSettings build_lens_depth_settings(
+    const dof_blur_chain::CinematicLensSettings& lens_settings) {
+    render_depth::LensBlurDepthSettings settings{};
+    settings.focus_depth_offset = lens_settings.focus_depth_offset;
+    settings.aperture = lens_settings.aperture;
+    settings.focus_falloff_acceleration = lens_settings.focus_falloff_acceleration;
+    settings.max_near_blur_px = lens_settings.max_near_blur_px;
+    settings.max_far_blur_px = lens_settings.max_far_blur_px;
+    settings.near_far_blur_bias = lens_settings.near_far_blur_bias;
+    settings.focus_dead_zone = 0.05f;
+    return settings;
 }
 
 std::string safe_string(const char* value) {
@@ -124,9 +177,293 @@ double env_double_clamped_renderer(const char* name, double default_value, doubl
     return std::clamp(parsed, min_value, max_value);
 }
 
+struct FinalLensPassSettings {
+    float barrel_distortion = 0.03f;
+    float distortion_zoom_compensation = 0.965f;
+    float vignette_strength = 0.25f;
+    float vignette_radius = 0.58f;
+    float vignette_softness = 0.42f;
+    float vignette_depth_influence = 0.0f;
+    float chromatic_aberration = 0.0f;
+    float chromatic_edge_start = 0.62f;
+    float chromatic_depth_influence = 0.0f;
+    float edge_softness = 0.0f;
+    float bloom_strength = 0.0f;
+    float bloom_threshold = 1.0f;
+    float bloom_radius = 0.0f;
+    float halation_strength = 0.0f;
+};
+
+FinalLensPassSettings build_final_lens_pass_settings(const WarpedScreenGrid::RealismSettings& camera_settings) {
+    FinalLensPassSettings settings{};
+    const auto& lens = camera_settings.lens;
+    settings.edge_softness = lens.edge_softness;
+    settings.barrel_distortion = lens.barrel_distortion;
+    settings.distortion_zoom_compensation = lens.distortion_zoom_compensation;
+    settings.vignette_strength = lens.vignette_strength;
+    settings.vignette_radius = lens.vignette_radius;
+    settings.vignette_softness = lens.vignette_softness;
+    settings.chromatic_aberration = lens.chromatic_aberration / 160.0f;
+    settings.chromatic_edge_start = lens.chromatic_edge_start;
+    settings.chromatic_depth_influence = lens.chromatic_depth_influence;
+    settings.bloom_strength = lens.bloom_strength;
+    settings.bloom_threshold = lens.bloom_threshold;
+    settings.bloom_radius = lens.bloom_radius;
+    settings.halation_strength = lens.halation_strength;
+    settings.barrel_distortion = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_BARREL_DISTORTION", settings.barrel_distortion, -0.5, 0.5));
+    settings.distortion_zoom_compensation = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_ZOOM_COMPENSATION", settings.distortion_zoom_compensation, 0.0, 1.5));
+    settings.vignette_strength = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_STRENGTH", settings.vignette_strength, 0.0, 1.0));
+    settings.vignette_radius = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_RADIUS", settings.vignette_radius, 0.0, 1.0));
+    settings.vignette_softness = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_VIGNETTE_SOFTNESS", settings.vignette_softness, 0.001, 1.0));
+    settings.chromatic_aberration = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_CHROMATIC_ABERRATION", settings.chromatic_aberration, 0.0, 0.05));
+    settings.chromatic_edge_start = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_CHROMATIC_EDGE_START", settings.chromatic_edge_start, 0.0, 1.0));
+    settings.edge_softness = static_cast<float>(
+        env_double_clamped_renderer("VIBBLE_FINAL_LENS_EDGE_SOFTNESS", settings.edge_softness, 0.0, 1.0));
+    return settings;
+}
+
+bool final_lens_pass_has_visible_effect(const FinalLensPassSettings& settings) {
+    return std::abs(settings.barrel_distortion) > 1.0e-5f ||
+           settings.vignette_strength > 1.0e-5f ||
+           settings.chromatic_aberration > 1.0e-5f ||
+           settings.edge_softness > 1.0e-5f ||
+           settings.bloom_strength > 1.0e-5f ||
+           settings.halation_strength > 1.0e-5f;
+}
+
+float smoothstep_range(float edge0, float edge1, float value) {
+    const float denom = edge1 - edge0;
+    if (std::abs(denom) <= 1.0e-6f) {
+        return value >= edge1 ? 1.0f : 0.0f;
+    }
+    const float t = std::clamp((value - edge0) / denom, 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+bool copy_fullscreen_texture(SDL_Renderer* renderer,
+                             SDL_Texture* source,
+                             SDL_Texture* destination,
+                             int width,
+                             int height,
+                             std::string& out_error) {
+    if (!render_diagnostics::set_render_target(renderer, destination)) {
+        out_error = "Failed to bind final lens copy target: " + safe_string(SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderViewport(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_BLEND;
+    Uint8 previous_alpha = 255;
+    Uint8 previous_r = 255;
+    Uint8 previous_g = 255;
+    Uint8 previous_b = 255;
+    SDL_GetTextureBlendMode(source, &previous_blend);
+    SDL_GetTextureAlphaMod(source, &previous_alpha);
+    SDL_GetTextureColorMod(source, &previous_r, &previous_g, &previous_b);
+
+    SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+    SDL_SetTextureAlphaMod(source, 255);
+    SDL_SetTextureColorMod(source, 255, 255, 255);
+    const SDL_FRect full_rect{0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+    const bool ok = render_diagnostics::render_texture(renderer, source, nullptr, &full_rect);
+
+    SDL_SetTextureBlendMode(source, previous_blend);
+    SDL_SetTextureAlphaMod(source, previous_alpha);
+    SDL_SetTextureColorMod(source, previous_r, previous_g, previous_b);
+
+    if (!ok) {
+        out_error = "Failed to copy final lens source: " + safe_string(SDL_GetError());
+        return false;
+    }
+    out_error.clear();
+    return true;
+}
+
+bool apply_final_lens_pass(SDL_Renderer* renderer,
+                           SDL_Texture* source,
+                           SDL_Texture* destination,
+                           int width,
+                           int height,
+                           SDL_FPoint optical_center_px,
+                           const FinalLensPassSettings& settings,
+                           bool bypass,
+                           std::string& out_error) {
+    if (!renderer || !source || !destination || width <= 0 || height <= 0) {
+        out_error = "Invalid final lens pass input.";
+        return false;
+    }
+
+    if (bypass || !final_lens_pass_has_visible_effect(settings)) {
+        return copy_fullscreen_texture(renderer, source, destination, width, height, out_error);
+    }
+
+    if (!render_diagnostics::set_render_target(renderer, destination)) {
+        out_error = "Failed to bind final lens target: " + safe_string(SDL_GetError());
+        return false;
+    }
+    SDL_SetRenderViewport(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
+    SDL_SetRenderScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
+
+    SDL_BlendMode previous_blend = SDL_BLENDMODE_BLEND;
+    Uint8 previous_alpha = 255;
+    Uint8 previous_r = 255;
+    Uint8 previous_g = 255;
+    Uint8 previous_b = 255;
+    SDL_GetTextureBlendMode(source, &previous_blend);
+    SDL_GetTextureAlphaMod(source, &previous_alpha);
+    SDL_GetTextureColorMod(source, &previous_r, &previous_g, &previous_b);
+    SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+    SDL_SetTextureAlphaMod(source, 255);
+    SDL_SetTextureColorMod(source, 255, 255, 255);
+
+    constexpr int kGridX = 32;
+    constexpr int kGridY = 18;
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
+    vertices.reserve((kGridX + 1) * (kGridY + 1));
+    indices.reserve(kGridX * kGridY * 6);
+
+    const float inv_w = 1.0f / static_cast<float>(std::max(1, width));
+    const float inv_h = 1.0f / static_cast<float>(std::max(1, height));
+    const SDL_FPoint optical_uv{
+        std::clamp(optical_center_px.x * inv_w, 0.0f, 1.0f),
+        std::clamp(optical_center_px.y * inv_h, 0.0f, 1.0f)};
+    const float aspect = static_cast<float>(width) / static_cast<float>(std::max(1, height));
+    const float zoom_compensation = std::clamp(settings.distortion_zoom_compensation, 0.70f, 1.15f);
+
+    for (int y = 0; y <= kGridY; ++y) {
+        const float v = static_cast<float>(y) / static_cast<float>(kGridY);
+        for (int x = 0; x <= kGridX; ++x) {
+            const float u = static_cast<float>(x) / static_cast<float>(kGridX);
+            const float centered_x = (u - optical_uv.x) * aspect;
+            const float centered_y = v - optical_uv.y;
+            const float r2 = centered_x * centered_x + centered_y * centered_y;
+            const float distortion = 1.0f + settings.barrel_distortion * r2;
+            const float sample_x = optical_uv.x + ((centered_x * distortion * zoom_compensation) / aspect);
+            const float sample_y = optical_uv.y + centered_y * distortion * zoom_compensation;
+
+            const float radius = std::sqrt(r2);
+            const float vignette = smoothstep_range(settings.vignette_radius,
+                                                    settings.vignette_radius + settings.vignette_softness,
+                                                    radius);
+            const float vintage_falloff = 1.0f - settings.vignette_strength * vignette * (0.85f + 0.15f * radius);
+            const Uint8 color = static_cast<Uint8>(std::clamp(
+                static_cast<int>(std::lround(std::clamp(vintage_falloff, 0.0f, 1.0f) * 255.0f)),
+                0,
+                255));
+            SDL_Vertex vertex{};
+            vertex.position = SDL_FPoint{u * static_cast<float>(width), v * static_cast<float>(height)};
+            vertex.color = SDL_FColor{
+                static_cast<float>(color) / 255.0f,
+                static_cast<float>(color) / 255.0f,
+                static_cast<float>(color) / 255.0f,
+                1.0f};
+            vertex.tex_coord = SDL_FPoint{
+                std::clamp(sample_x, 0.001f, 0.999f),
+                std::clamp(sample_y, 0.001f, 0.999f)};
+            vertices.push_back(vertex);
+        }
+    }
+
+    for (int y = 0; y < kGridY; ++y) {
+        for (int x = 0; x < kGridX; ++x) {
+            const int i0 = y * (kGridX + 1) + x;
+            const int i1 = i0 + 1;
+            const int i2 = i0 + (kGridX + 1);
+            const int i3 = i2 + 1;
+            indices.push_back(i0);
+            indices.push_back(i2);
+            indices.push_back(i1);
+            indices.push_back(i1);
+            indices.push_back(i2);
+            indices.push_back(i3);
+        }
+    }
+
+    bool ok = render_diagnostics::render_geometry(renderer,
+                                                   source,
+                                                   vertices.data(),
+                                                   static_cast<int>(vertices.size()),
+                                                   indices.data(),
+                                                   static_cast<int>(indices.size()));
+
+    if (ok && (settings.edge_softness > 1.0e-5f || settings.bloom_strength > 1.0e-5f ||
+               settings.halation_strength > 1.0e-5f || settings.chromatic_aberration > 1.0e-5f)) {
+        SDL_SetTextureBlendMode(source, SDL_BLENDMODE_ADD);
+        const float max_dim = static_cast<float>(std::max(width, height));
+        const float edge_alpha = std::clamp(settings.edge_softness * 0.16f, 0.0f, 0.24f);
+        const float bloom_alpha = std::clamp(settings.bloom_strength * 0.18f +
+                                                 settings.halation_strength * 0.10f,
+                                             0.0f,
+                                             0.30f);
+        auto draw_soft_copy = [&](float inflate_px, float alpha, Uint8 r, Uint8 g, Uint8 b) {
+            if (alpha <= 1.0e-5f || !ok) {
+                return;
+            }
+            SDL_SetTextureAlphaMod(source, static_cast<Uint8>(std::clamp(
+                                               static_cast<int>(std::lround(alpha * 255.0f)),
+                                               0,
+                                               255)));
+            SDL_SetTextureColorMod(source, r, g, b);
+            const SDL_FRect dst{
+                -inflate_px,
+                -inflate_px,
+                static_cast<float>(width) + inflate_px * 2.0f,
+                static_cast<float>(height) + inflate_px * 2.0f};
+            ok = render_diagnostics::render_texture(renderer, source, nullptr, &dst);
+        };
+        draw_soft_copy(max_dim * 0.006f, edge_alpha, 220, 220, 220);
+        draw_soft_copy(std::max(1.0f, settings.bloom_radius * max_dim * 0.012f), bloom_alpha, 255, 224, 196);
+
+        const float ca = std::clamp(settings.chromatic_aberration, 0.0f, 0.05f);
+        if (ca > 1.0e-5f && ok) {
+            const float edge_bias = 1.0f - std::clamp(settings.chromatic_edge_start, 0.0f, 1.0f);
+            const float shift = std::max(0.5f, ca * max_dim * (0.45f + edge_bias));
+            SDL_SetTextureAlphaMod(source, static_cast<Uint8>(std::clamp(
+                                               static_cast<int>(settings.chromatic_depth_influence * 70.0f + 28.0f),
+                                               0,
+                                               96)));
+            SDL_SetTextureColorMod(source, 255, 120, 120);
+            const SDL_FRect red_dst{-shift, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+            ok = render_diagnostics::render_texture(renderer, source, nullptr, &red_dst);
+            if (ok) {
+                SDL_SetTextureColorMod(source, 120, 190, 255);
+                const SDL_FRect blue_dst{shift, 0.0f, static_cast<float>(width), static_cast<float>(height)};
+                ok = render_diagnostics::render_texture(renderer, source, nullptr, &blue_dst);
+            }
+        }
+    }
+
+    SDL_SetTextureBlendMode(source, previous_blend);
+    SDL_SetTextureAlphaMod(source, previous_alpha);
+    SDL_SetTextureColorMod(source, previous_r, previous_g, previous_b);
+
+    if (!ok) {
+        out_error = "Failed to render final lens pass: " + safe_string(SDL_GetError());
+        return false;
+    }
+
+    out_error.clear();
+    return true;
+}
+
 std::uint32_t creation_budget_count_per_frame() {
     static const std::uint32_t count = static_cast<std::uint32_t>(
-        env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 3, 1, 1024));
+        env_int_clamped_renderer("VIBBLE_RENDER_MAX_CREATIONS_PER_FRAME", 4, 1, 1024));
     return count;
 }
 
@@ -210,32 +547,57 @@ void fill_screen_quad_packet_vertices(float center_x,
     fill_quad_packet_vertices(tl, tr, br, bl, 0.0f, 0.0f, 1.0f, 1.0f, target_width, target_height, out_packet);
 }
 
-bool clip_quad_against_v_threshold(const SDL_Vertex (&quad)[4],
-                                   float visible_v,
-                                   std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices,
-                                   std::array<int, render_sprite_geometry::kMaxClippedIndices>& out_indices,
-                                   int& out_vertex_count,
-                                   int& out_index_count) {
+bool clip_quad_against_ground_parallel_line(
+    const SDL_Vertex (&quad)[4],
+    const render_floor_clip::GroundParallelClipLine& clip_line,
+    std::array<SDL_Vertex, render_sprite_geometry::kMaxClippedVertices>& out_vertices,
+    std::array<int, render_sprite_geometry::kMaxClippedIndices>& out_indices,
+    int& out_vertex_count,
+    int& out_index_count) {
     out_vertices = {};
     out_indices = {};
     out_vertex_count = 0;
     out_index_count = 0;
 
-    constexpr float kEpsilon = 1.0e-6f;
-    const auto inside = [visible_v, kEpsilon](const SDL_Vertex& v) {
-        return v.tex_coord.y <= (visible_v + kEpsilon);
+    if (!clip_line.valid) {
+        return false;
+    }
+
+    constexpr float kEpsilon = 1.0e-5f;
+    const SDL_FPoint line_delta{
+        clip_line.right.x - clip_line.left.x,
+        clip_line.right.y - clip_line.left.y
     };
-    const auto interpolate = [visible_v, kEpsilon](const SDL_Vertex& a, const SDL_Vertex& b) {
+    const auto signed_distance = [&clip_line, line_delta](const SDL_FPoint& point) {
+        return line_delta.x * (point.y - clip_line.left.y) -
+               line_delta.y * (point.x - clip_line.left.x);
+    };
+
+    float inside_sign = signed_distance(clip_line.inside_reference);
+    if (!std::isfinite(inside_sign) || std::fabs(inside_sign) <= kEpsilon) {
+        inside_sign = -1.0f;
+    }
+    inside_sign = inside_sign < 0.0f ? -1.0f : 1.0f;
+
+    const auto oriented_distance = [signed_distance, inside_sign](const SDL_Vertex& vertex) {
+        return signed_distance(vertex.position) * inside_sign;
+    };
+    const auto inside = [oriented_distance, kEpsilon](const SDL_Vertex& vertex) {
+        return oriented_distance(vertex) >= -kEpsilon;
+    };
+    const auto interpolate = [oriented_distance, kEpsilon](const SDL_Vertex& a, const SDL_Vertex& b) {
         SDL_Vertex out{};
-        const float dv = b.tex_coord.y - a.tex_coord.y;
+        const float da = oriented_distance(a);
+        const float db = oriented_distance(b);
+        const float denom = da - db;
         float t = 0.0f;
-        if (std::fabs(dv) > kEpsilon) {
-            t = std::clamp((visible_v - a.tex_coord.y) / dv, 0.0f, 1.0f);
+        if (std::fabs(denom) > kEpsilon) {
+            t = std::clamp(da / denom, 0.0f, 1.0f);
         }
         out.position.x = a.position.x + (b.position.x - a.position.x) * t;
         out.position.y = a.position.y + (b.position.y - a.position.y) * t;
         out.tex_coord.x = a.tex_coord.x + (b.tex_coord.x - a.tex_coord.x) * t;
-        out.tex_coord.y = visible_v;
+        out.tex_coord.y = a.tex_coord.y + (b.tex_coord.y - a.tex_coord.y) * t;
         out.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
         return out;
     };
@@ -329,6 +691,51 @@ std::uintptr_t floor_sort_id(bool sprite_packet, std::uintptr_t sequence) {
     constexpr std::uintptr_t kSpritePacketSortOffset =
         std::uintptr_t{1} << ((sizeof(std::uintptr_t) * 8u) - 1u);
     return sprite_packet ? (kSpritePacketSortOffset + sequence) : sequence;
+}
+
+
+bool is_supported_dust_image(const std::filesystem::path& path) {
+    std::string ext = path.extension().u8string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+
+    return ext == ".png" ||
+           ext == ".webp" ||
+           ext == ".jpg" ||
+           ext == ".jpeg";
+}
+
+double signed_depth_midpoint_for_layer(int layer_id, const std::vector<double>& depth_edges) {
+    const int abs_layer = std::abs(layer_id);
+    if (abs_layer <= 0 || depth_edges.size() < 2) {
+        return 0.0;
+    }
+
+    const std::size_t start_index = std::min<std::size_t>(
+        static_cast<std::size_t>(abs_layer - 1),
+        depth_edges.size() - 2u);
+    const std::size_t end_index = std::min<std::size_t>(start_index + 1u, depth_edges.size() - 1u);
+    const double midpoint = (depth_edges[start_index] + depth_edges[end_index]) * 0.5;
+    return layer_id >= 0 ? midpoint : -midpoint;
+}
+
+void assign_dust_depth_for_layer(GpuDepthLayerDrawPackets& layer,
+                                 int focus_depth_layer,
+                                 double focus_world_z,
+                                 float depth_axis_sign,
+                                 const std::vector<double>& depth_edges) {
+    const double layer_signed_depth = signed_depth_midpoint_for_layer(layer.depth_layer, depth_edges);
+    const double focus_signed_depth = signed_depth_midpoint_for_layer(focus_depth_layer, depth_edges);
+    const double signed_distance_from_focus = layer_signed_depth - focus_signed_depth;
+    const double world_distance = std::abs(signed_distance_from_focus);
+
+    layer.world_distance_from_focus = static_cast<float>(std::max(0.0, world_distance));
+    layer.dust_world_z = render_depth::world_z_from_depth_offset(
+        static_cast<float>(signed_distance_from_focus),
+        static_cast<float>(focus_world_z),
+        depth_axis_sign);
+    layer.has_dust_world_z = std::isfinite(layer.dust_world_z);
 }
 
 void fill_geometry_vertices(const GpuSpriteDrawPacket& packet,
@@ -998,10 +1405,12 @@ std::unique_ptr<OpenGLRuntimeRenderer> OpenGLRuntimeRenderer::Create(SDL_Rendere
 
 bool OpenGLRuntimeRenderer::initialize(std::string& out_error) {
     out_error.clear();
+
     if (!renderer_) {
         out_error = "Renderer is null.";
         return false;
     }
+
     renderer_name_ = renderer_name_.empty() ? std::string("unknown") : renderer_name_;
     if (const char* name = SDL_GetRendererName(renderer_)) {
         renderer_name_ = name;
@@ -1027,10 +1436,13 @@ bool OpenGLRuntimeRenderer::initialize(std::string& out_error) {
     if (const std::optional<SDL_Point> target = render_target_manager_.current_size(); target.has_value()) {
         prewarm.target_width = static_cast<std::uint32_t>(target->x);
         prewarm.target_height = static_cast<std::uint32_t>(target->y);
+
         std::string prewarm_error;
-        ensure_render_targets(prewarm, prewarm_error);
-        ensure_far_background_textures();
+        (void)ensure_render_targets(prewarm, prewarm_error);
+        (void)ensure_far_background_textures();
+        (void)ensure_atmospheric_dust_textures();
     }
+
     return true;
 }
 
@@ -1038,10 +1450,14 @@ void OpenGLRuntimeRenderer::destroy_render_targets() {
     render_diagnostics::destroy_texture(floor_target_);
     render_diagnostics::destroy_texture(xy_sprite_target_);
     render_diagnostics::destroy_texture(composite_target_);
-    render_diagnostics::destroy_texture(finale_effects_target_);
+    render_diagnostics::destroy_texture(lens_post_target_);
+
     destroy_depth_layer_targets();
     dof_blur_chain_.destroy_targets();
+
     destroy_far_background_textures();
+    destroy_atmospheric_dust_textures();
+
     output_target_width_ = 1;
     output_target_height_ = 1;
     clear_creation_queue();
@@ -1091,6 +1507,7 @@ bool OpenGLRuntimeRenderer::process_creation_queue(const GpuSceneFrameData& fram
             if (job.label == "floor") target = &floor_target_;
             else if (job.label == "xy_sprite") target = &xy_sprite_target_;
             else if (job.label == "composite") target = &composite_target_;
+            else if (job.label == "lens_post") target = &lens_post_target_;
             if (target && !*target) {
                 *target = create_render_target(renderer_, static_cast<int>(frame_data.target_width),
                                                static_cast<int>(frame_data.target_height), job.label, out_error);
@@ -1157,6 +1574,108 @@ void OpenGLRuntimeRenderer::configure_render_target(SDL_Texture* texture) {
     SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
     SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
 }
+
+
+bool OpenGLRuntimeRenderer::ensure_atmospheric_dust_textures() {
+    if (!renderer_) {
+        return false;
+    }
+
+    if (atmospheric_dust_textures_loaded_) {
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+        return true;
+    }
+
+    atmospheric_dust_textures_loaded_ = true;
+    atmospheric_dust_textures_.clear();
+
+    const std::filesystem::path dust_root = project_root_path() / "resources" / "dust";
+    if (!std::filesystem::exists(dust_root)) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Atmospheric dust folder does not exist: " +
+                          dust_root.u8string());
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+        return true;
+    }
+
+    std::vector<std::filesystem::path> image_paths;
+    std::error_code ec;
+    std::filesystem::recursive_directory_iterator it(
+        dust_root,
+        std::filesystem::directory_options::skip_permission_denied,
+        ec);
+    const std::filesystem::recursive_directory_iterator end{};
+
+    for (; it != end && !ec; it.increment(ec)) {
+        const std::filesystem::directory_entry& entry = *it;
+
+        std::error_code entry_ec;
+        if (!entry.is_regular_file(entry_ec) || entry_ec) {
+            continue;
+        }
+
+        const std::filesystem::path path = entry.path();
+        if (!is_supported_dust_image(path)) {
+            continue;
+        }
+
+        image_paths.push_back(path);
+    }
+
+    if (ec) {
+        vibble::log::warn("[OpenGLRuntimeRenderer] Stopped scanning atmospheric dust folder early: " +
+                          dust_root.u8string() + " error=" + ec.message());
+    }
+
+    std::sort(image_paths.begin(), image_paths.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.u8string() < rhs.u8string();
+    });
+
+    atmospheric_dust_textures_.reserve(image_paths.size());
+
+    for (const std::filesystem::path& path : image_paths) {
+        SDL_Surface* surface = IMG_Load(path.u8string().c_str());
+        if (!surface) {
+            vibble::log::warn("[OpenGLRuntimeRenderer] Failed to load atmospheric dust frame '" +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            continue;
+        }
+
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        SDL_DestroySurface(surface);
+
+        if (!texture) {
+            vibble::log::warn("[OpenGLRuntimeRenderer] Failed to upload atmospheric dust frame '" +
+                              path.u8string() + "': " + safe_string(SDL_GetError()));
+            continue;
+        }
+
+        render_diagnostics::note_texture_created(texture);
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR);
+
+        atmospheric_dust_textures_.push_back(texture);
+    }
+
+    vibble::log::info("[OpenGLRuntimeRenderer] Loaded " +
+                      std::to_string(atmospheric_dust_textures_.size()) +
+                      " atmospheric dust frame texture(s) from " +
+                      dust_root.u8string());
+
+    dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+    return true;
+}
+
+
+void OpenGLRuntimeRenderer::destroy_atmospheric_dust_textures() {
+    for (SDL_Texture*& texture : atmospheric_dust_textures_) {
+        render_diagnostics::destroy_texture(texture);
+    }
+
+    atmospheric_dust_textures_.clear();
+    atmospheric_dust_textures_loaded_ = false;
+    dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+}
+
 
 bool OpenGLRuntimeRenderer::ensure_far_background_textures() {
     if (!renderer_) {
@@ -1289,9 +1808,22 @@ bool opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(
         return false;
     }
 
-    const float bottom_v = clip.visibility == render_floor_clip::Visibility::PartiallyVisible
-        ? clip.visible_v
-        : 1.0f;
+    if (clip.visibility == render_floor_clip::Visibility::FullyVisible) {
+        fill_quad_packet_vertices(projected.screen_tl,
+                                  projected.screen_tr,
+                                  projected.screen_br,
+                                  projected.screen_bl,
+                                  u0,
+                                  v0,
+                                  u1,
+                                  v1,
+                                  output_w,
+                                  output_h,
+                                  out_packet);
+        return true;
+    }
+
+    const float bottom_v = clip.visible_v;
     const auto make_vertex = [](const SDL_FPoint& point, float u, float v) {
         SDL_Vertex vertex{};
         vertex.position = point;
@@ -1309,8 +1841,15 @@ bool opengl_runtime_renderer_detail::build_floor_clipped_sprite_packet(
     std::array<int, render_sprite_geometry::kMaxClippedIndices> clipped_indices{};
     int clipped_vertex_count = 0;
     int clipped_index_count = 0;
-    if (!clip_quad_against_v_threshold(
-            quad, bottom_v, clipped_vertices, clipped_indices, clipped_vertex_count, clipped_index_count)) {
+    const render_floor_clip::GroundParallelClipLine clip_line =
+        render_floor_clip::compute_ground_parallel_clip_line(
+            projected.has_crop_screen_basis ? projected.crop_screen_tl : projected.screen_tl,
+            projected.has_crop_screen_basis ? projected.crop_screen_tr : projected.screen_tr,
+            projected.has_crop_screen_basis ? projected.crop_screen_br : projected.screen_br,
+            projected.has_crop_screen_basis ? projected.crop_screen_bl : projected.screen_bl,
+            bottom_v);
+    if (!clip_quad_against_ground_parallel_line(
+            quad, clip_line, clipped_vertices, clipped_indices, clipped_vertex_count, clipped_index_count)) {
         return false;
     }
     const auto to_gpu_vertex = [output_w, output_h](const SDL_Vertex& vertex) {
@@ -1449,6 +1988,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             used_active_fallback);
     const WarpedScreenGrid& camera = assets_->getView();
     const auto& camera_settings = camera.get_settings();
+    const world::CameraProjectionParams projection = camera.projection_params();
+    const float depth_axis_sign = render_depth::normalize_depth_axis_sign(
+        static_cast<float>(projection.forward_z));
     const double depth_interval = std::max(1.0, static_cast<double>(camera_settings.layer_depth_interval));
     const double depth_curve = std::max(0.0, static_cast<double>(camera_settings.layer_depth_curve));
     const double effective_max_depth = std::max(depth_interval, static_cast<double>(camera_settings.max_cull_depth));
@@ -1502,6 +2044,7 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
 
     const Assets::DevGridOverlayContext dev_grid_overlay_context = assets_->dev_grid_overlay_context();
     if (assets_->dev_grid_overlay_enabled() &&
+        dev_grid_overlay_context.kind != Assets::DevGridOverlayKind::XYPlaneAtAssetDepth &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.x) &&
         std::isfinite(dev_grid_overlay_context.exact_floor_xz.y)) {
         scratch_floor_grid_overlay_draws_.clear();
@@ -1570,9 +2113,9 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
         out_data.xy_sprite_draws.size(), static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())));
 
     out_data.depth_layers.clear();
-    const bool dof_requested_by_settings = dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
-                                                                   camera_settings.blur_px,
-                                                                   camera_settings.radial_blur_px);
+    const dof_blur_chain::CinematicLensSettings lens_settings = build_cinematic_lens_settings(camera_settings);
+    const bool dof_requested_by_settings = dof_blur_chain::enabled(lens_settings);
+    const render_depth::LensBlurDepthSettings lens_depth_settings = build_lens_depth_settings(lens_settings);
     const bool dof_requested = allow_dof_depth_layers &&
         dof_requested_by_settings;
     if (dof_requested) {
@@ -1593,12 +2136,6 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             return lhs > rhs;
         });
 
-        int max_distance_from_focus = 0;
-        for (int layer_id : scratch_depth_layer_ids_) {
-            max_distance_from_focus = std::max(max_distance_from_focus,
-                                               std::abs(layer_id - out_data.focus_depth_layer));
-        }
-
         out_data.depth_layers.reserve(scratch_depth_layer_ids_.size());
         for (int layer_id : scratch_depth_layer_ids_) {
             GpuDepthLayerDrawPackets layer{};
@@ -1607,10 +2144,15 @@ bool OpenGLRuntimeRenderer::build_gpu_scene_frame_data(std::uint32_t target_widt
             if (!std::is_sorted(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy)) {
                 std::stable_sort(layer.packets.begin(), layer.packets.end(), opengl_runtime_renderer_detail::draw_packet_sort_predicate_xy);
             }
-            layer.blur_strength_px = render_depth::dof_blur_strength_for_layer_distance(
-                layer.depth_layer,
-                out_data.focus_depth_layer,
-                max_distance_from_focus);
+            layer.blur_strength_px = render_depth::dof_blur_amount_for_layer_depth(
+                static_cast<float>(layer.depth_layer),
+                static_cast<float>(out_data.focus_depth_layer),
+                lens_depth_settings);
+            assign_dust_depth_for_layer(layer,
+                                        out_data.focus_depth_layer,
+                                        camera.current_focus_plane_world_z(),
+                                        depth_axis_sign,
+                                        frame_depth_edges);
             out_data.depth_layers.push_back(std::move(layer));
         }
     }
@@ -1684,10 +2226,11 @@ bool OpenGLRuntimeRenderer::ensure_render_targets(const GpuSceneFrameData& frame
     if (!floor_target_) queue_missing_main("floor");
     if (!xy_sprite_target_) queue_missing_main("xy_sprite");
     if (!composite_target_) queue_missing_main("composite");
+    if (!lens_post_target_) queue_missing_main("lens_post");
     if (!process_creation_queue(frame_data, out_error)) {
         return false;
     }
-    if (!floor_target_ || !xy_sprite_target_ || !composite_target_) {
+    if (!floor_target_ || !xy_sprite_target_ || !composite_target_ || !lens_post_target_) {
         out_error = "Render target creation deferred by per-frame budget.";
         return false;
     }
@@ -1829,6 +2372,21 @@ bool OpenGLRuntimeRenderer::render_packet_batch(const std::vector<GpuSpriteDrawP
 
     return flush_batch();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                          SDL_Texture* ui_overlay_texture,
@@ -1992,10 +2550,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     const auto& camera = assets_->getView();
     const auto& camera_settings = camera.get_settings();
     const float camera_zoom_percent = resolve_camera_zoom_percent(camera);
-    const bool dof_requested_by_settings =
-        dof_blur_chain::enabled(camera_settings.depth_of_field_enabled,
-                                camera_settings.blur_px,
-                                camera_settings.radial_blur_px);
+    const dof_blur_chain::CinematicLensSettings lens_settings = build_cinematic_lens_settings(camera_settings);
+    const bool dof_requested_by_settings = dof_blur_chain::enabled(lens_settings);
     const float now_seconds = assets_->game_context().elapsed_seconds();
     ingest_player_damage_pulse(now_seconds);
     prune_expired_damage_pulses(now_seconds);
@@ -2194,10 +2750,22 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                      out_error)) {
                 return false;
             }
-            dof_layers.push_back(dof_blur_chain::LayerTexture{
-                frame_to_render->focus_depth_layer + 1,
-                1.0f,
-                xy_sprite_target_});
+            const auto projection = camera.projection_params();
+            const float depth_axis_sign = render_depth::normalize_depth_axis_sign(
+                static_cast<float>(projection.forward_z));
+            const float fallback_distance = std::max(1.0f, camera_settings.layer_depth_interval);
+            dof_blur_chain::LayerTexture flattened_layer{};
+            flattened_layer.depth_layer = frame_to_render->focus_depth_layer + 1;
+            flattened_layer.blur_strength = 1.0f;
+            flattened_layer.blur_amount = lens_settings.max_far_blur_px;
+            flattened_layer.texture = xy_sprite_target_;
+            flattened_layer.world_distance_from_focus = fallback_distance;
+            flattened_layer.dust_world_z = render_depth::world_z_from_depth_offset(
+                fallback_distance,
+                static_cast<float>(camera.current_focus_plane_world_z()),
+                depth_axis_sign);
+            flattened_layer.has_dust_world_z = true;
+            dof_layers.push_back(flattened_layer);
             used_flattened_xy_dof_layer = true;
             return true;
         };
@@ -2221,7 +2789,18 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                     render_diagnostics::end_frame();
                     return false;
                 }
-                dof_layers.push_back(dof_blur_chain::LayerTexture{layer.depth_layer, layer.blur_strength_px, layer_target});
+                dof_blur_chain::LayerTexture dof_layer{};
+                dof_layer.depth_layer = layer.depth_layer;
+                dof_layer.blur_strength = 1.0f;
+                dof_layer.layer_depth = static_cast<float>(layer.depth_layer);
+                dof_layer.blur_amount = layer.blur_strength_px;
+                dof_layer.is_foreground = layer.depth_layer < frame_to_render->focus_depth_layer;
+                dof_layer.is_focus_protected = layer.depth_layer == frame_to_render->focus_depth_layer;
+                dof_layer.texture = layer_target;
+                dof_layer.world_distance_from_focus = layer.world_distance_from_focus;
+                dof_layer.dust_world_z = layer.dust_world_z;
+                dof_layer.has_dust_world_z = layer.has_dust_world_z;
+                dof_layers.push_back(dof_layer);
             }
         } else if (!rebuild_flattened_xy_dof_layer()) {
             render_diagnostics::end_frame();
@@ -2229,21 +2808,35 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         }
         apply_damage_pulse_to_layers();
 
-        const SDL_Point screen_center = assets_->getView().get_screen_center();
         const SDL_FPoint optical_center{
-            std::clamp(static_cast<float>(screen_center.x), 0.0f, static_cast<float>(frame_to_render->target_width)),
-            std::clamp(static_cast<float>(screen_center.y), 0.0f, static_cast<float>(frame_to_render->target_height))};
+            static_cast<float>(frame_to_render->target_width) * 0.5f,
+            static_cast<float>(frame_to_render->target_height) * 0.5f};
         dof_blur_chain_.set_output_dimensions(static_cast<int>(frame_to_render->target_width),
                                               static_cast<int>(frame_to_render->target_height));
+
+        (void)ensure_atmospheric_dust_textures();
+        dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+
+        dof_blur_chain::DustAnchor dust_anchor{};
+        dust_anchor.world_x = camera.get_view_center_f().x;
+        dust_anchor.world_z = static_cast<float>(camera.current_anchor_world_z());
+        dust_anchor.world_units_per_depth_layer = std::max(1.0f, camera_settings.layer_depth_interval);
+        dust_anchor.max_dust_world_distance = std::max(1.0f, camera_settings.dynamic_renderer_depth_efficiency_depth);
+        dust_anchor.focus_world_z = static_cast<float>(camera.current_focus_plane_world_z());
+        dust_anchor.depth_axis_sign = render_depth::normalize_depth_axis_sign(
+            static_cast<float>(camera.projection_params().forward_z));
+        dust_anchor.projection = camera.projection_params();
+        dust_anchor.has_projection = true;
+
         const dof_blur_chain::CompositeResult dof_result =
             dof_blur_chain_.compose(dof_layers,
                                     floor_target_,
-                                    camera_settings.depth_of_field_enabled,
-                                    camera_settings.blur_px,
-                                    camera_settings.radial_blur_px,
+                                    lens_settings,
                                     optical_center,
                                     frame_to_render->focus_depth_layer,
-                                    camera_zoom_percent);
+                                    camera_zoom_percent,
+                                    now_seconds,
+                                    dust_anchor);
 
         const bool frame_contains_focus_depth_layer = std::any_of(
             frame_to_render->depth_layers.begin(),
@@ -2262,14 +2855,18 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 return false;
             }
             apply_damage_pulse_to_layers();
+            (void)ensure_atmospheric_dust_textures();
+            dof_blur_chain_.set_dust_frames(atmospheric_dust_textures_);
+
             resolved_dof_result =
                 dof_blur_chain_.compose(dof_layers,
                                         floor_target_,
-                                        camera_settings.depth_of_field_enabled,
-                                        camera_settings.blur_px,
-                                        camera_settings.radial_blur_px,
+                                        lens_settings,
                                         optical_center,
-                                        frame_to_render->focus_depth_layer);
+                                        frame_to_render->focus_depth_layer,
+                                        camera_zoom_percent,
+                                        now_seconds,
+                                        dust_anchor);
         }
 
         if (resolved_dof_result.valid) {
@@ -2277,11 +2874,21 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                 render_diagnostics::end_frame();
                 return false;
             }
+            if (resolved_dof_result.background_mid) {
+                SDL_SetTextureBlendMode(resolved_dof_result.background_mid, premultiplied_over_blend_mode());
+                SDL_SetTextureAlphaMod(resolved_dof_result.background_mid, 255);
+                SDL_SetTextureColorMod(resolved_dof_result.background_mid, 255, 255, 255);
+            }
             if (resolved_dof_result.background_mid &&
                 !render_diagnostics::render_texture(renderer_, resolved_dof_result.background_mid, nullptr, &full_rect)) {
                 out_error = "Failed to composite DoF background target: " + safe_string(SDL_GetError());
                 render_diagnostics::end_frame();
                 return false;
+            }
+            if (resolved_dof_result.foreground_mid) {
+                SDL_SetTextureBlendMode(resolved_dof_result.foreground_mid, premultiplied_over_blend_mode());
+                SDL_SetTextureAlphaMod(resolved_dof_result.foreground_mid, 255);
+                SDL_SetTextureColorMod(resolved_dof_result.foreground_mid, 255, 255, 255);
             }
             if (resolved_dof_result.foreground_mid &&
                 !render_diagnostics::render_texture(renderer_, resolved_dof_result.foreground_mid, nullptr, &full_rect)) {
@@ -2291,9 +2898,9 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             }
             render_diagnostics::set_blur_pass_count(resolved_dof_result.blur_pass_count);
             if (used_flattened_xy_dof_layer) {
-                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->ui_overlay");
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_flattened_xy_layer->final_lens->ui_overlay");
             } else {
-                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->ui_overlay");
+                render_diagnostics::set_composite_layers_submitted("floor_pass->dof_background_mid->dof_foreground_mid->final_lens->ui_overlay");
             }
             dof_composited = true;
         } else {
@@ -2360,7 +2967,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
             return false;
         }
         xy_pass_ms += elapsed_ms(xy_begin, SDL_GetPerformanceCounter());
-        render_diagnostics::set_composite_layers_submitted("direct_scene->ui_overlay");
+        render_diagnostics::set_composite_layers_submitted("direct_scene->final_lens->ui_overlay");
     }
 
     if (draw_anchor_debug) {
@@ -2372,8 +2979,34 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                                           assets_->is_dev_mode());
     }
 
+    const SDL_FPoint final_optical_center{
+        static_cast<float>(frame_to_render->target_width) * 0.5f,
+        static_cast<float>(frame_to_render->target_height) * 0.5f};
+    const FinalLensPassSettings final_lens_settings = build_final_lens_pass_settings(camera_settings);
+    const bool bypass_final_lens_for_debug = draw_anchor_debug || draw_movement_debug || draw_impass_floor_debug;
+    const std::uint64_t final_lens_begin = SDL_GetPerformanceCounter();
+    if (!apply_final_lens_pass(renderer_,
+                               composite_target_,
+                               lens_post_target_,
+                               static_cast<int>(frame_to_render->target_width),
+                               static_cast<int>(frame_to_render->target_height),
+                               final_optical_center,
+                               final_lens_settings,
+                               bypass_final_lens_for_debug,
+                               out_error)) {
+        render_diagnostics::end_frame();
+        return false;
+    }
+    const double final_lens_ms = elapsed_ms(final_lens_begin, SDL_GetPerformanceCounter());
+    composite_pass_ms += final_lens_ms;
+    render_diagnostics::add_lens_pass_ms(final_lens_ms);
+
     if (frame_to_render->ui_overlay_texture) {
         const std::uint64_t ui_begin = SDL_GetPerformanceCounter();
+        if (!bind_target_no_clear(lens_post_target_)) {
+            render_diagnostics::end_frame();
+            return false;
+        }
         if (!render_diagnostics::render_texture(renderer_, frame_to_render->ui_overlay_texture, nullptr, &full_rect)) {
             out_error = "Failed to composite UI overlay texture: " + safe_string(SDL_GetError());
             render_diagnostics::end_frame();
@@ -2387,8 +3020,8 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
         render_diagnostics::end_frame();
         return false;
     }
-    if (!render_diagnostics::render_texture(renderer_, composite_target_, nullptr, &full_rect)) {
-        out_error = "Failed to present composite target: " + safe_string(SDL_GetError());
+    if (!render_diagnostics::render_texture(renderer_, lens_post_target_, nullptr, &full_rect)) {
+        out_error = "Failed to present final lens target: " + safe_string(SDL_GetError());
         render_diagnostics::end_frame();
         return false;
     }
@@ -2434,6 +3067,7 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
                   << " empty_scene_hold_bypassed_startup_policy=0"
                   << " dof_last_ms=" << last_dof_path_ms_
                   << " composite=" << composite_pass_ms
+                  << " lens_pass=" << final_lens_ms
                   << " ui_prepare=" << ui_overlay_prepare_ms
                   << " ui_copy=" << ui_overlay_ms
                   << " backbuffer=" << backbuffer_ms
@@ -2453,6 +3087,17 @@ bool OpenGLRuntimeRenderer::render_frame(std::string& out_error,
     render_diagnostics::end_frame();
     return true;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 SDL_Color OpenGLRuntimeRenderer::resolve_runtime_floor_clear_color() const {
     SDL_Color map_default{0, 0, 0, 255};

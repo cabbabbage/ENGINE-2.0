@@ -15,6 +15,7 @@
       ]
     },
     "sdl3-ttf",
+    "clipper2",
     "glad",
     "opengl"
   ]

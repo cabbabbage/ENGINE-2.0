@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "runtime_map_graph.hpp"
@@ -42,6 +43,19 @@ struct PlayerDamagePulseState {
     float health_ratio_after = 1.0f;
 };
 
+struct AimAssistOverlayPoint {
+    float world_x = 0.0f;
+    float world_y = 0.0f;
+    float world_z = 0.0f;
+};
+
+struct AimAssistOverlayState {
+    bool enabled = false;
+    bool is_throw_arc = false;
+    std::vector<AimAssistOverlayPoint> points;
+    AimAssistOverlayPoint nub{};
+};
+
 class GameRuntimeContext {
 public:
     void begin_frame(Assets* assets,
@@ -78,6 +92,8 @@ public:
     const PlayerMotionDisturbanceState& player_motion_disturbance() const { return player_motion_disturbance_; }
     void emit_player_damage_pulse(int damage_amount, int health_after, int starting_health);
     const PlayerDamagePulseState& player_damage_pulse() const { return player_damage_pulse_; }
+    void set_aim_assist_overlay(AimAssistOverlayState state) { aim_assist_overlay_ = std::move(state); }
+    const AimAssistOverlayState& aim_assist_overlay() const { return aim_assist_overlay_; }
 
 private:
     void prune_expired_room_fly_aggression();
@@ -94,6 +110,7 @@ private:
     std::unordered_map<std::string, RoomFlyAggressionState> room_fly_aggression_;
     PlayerMotionDisturbanceState player_motion_disturbance_{};
     PlayerDamagePulseState player_damage_pulse_{};
+    AimAssistOverlayState aim_assist_overlay_{};
 };
 
 } // namespace runtime::context

@@ -36,6 +36,28 @@ void test_clip_math() {
     }
 }
 
+void test_ground_parallel_clip_line_ignores_rotated_visual_quad() {
+    const SDL_FPoint basis_tl{0.0f, 0.0f};
+    const SDL_FPoint basis_tr{100.0f, 0.0f};
+    const SDL_FPoint basis_br{100.0f, 100.0f};
+    const SDL_FPoint basis_bl{0.0f, 100.0f};
+
+    const auto line = render_floor_clip::compute_ground_parallel_clip_line(
+        basis_tl,
+        basis_tr,
+        basis_br,
+        basis_bl,
+        0.75f);
+
+    assert(line.valid);
+    assert(near(line.left.x, 0.0f));
+    assert(near(line.left.y, 75.0f));
+    assert(near(line.right.x, 100.0f));
+    assert(near(line.right.y, 75.0f));
+    assert(near(line.inside_reference.x, 50.0f));
+    assert(near(line.inside_reference.y, 0.0f));
+}
+
 void test_atlas_and_flip_mapping() {
     const render_floor_clip::AtlasUvRect atlas{0.25f, 0.5f, 0.75f, 1.0f};
     {
@@ -59,6 +81,7 @@ void test_atlas_and_flip_mapping() {
 
 int main() {
     test_clip_math();
+    test_ground_parallel_clip_line_ignores_rotated_visual_quad();
     test_atlas_and_flip_mapping();
     return 0;
 }

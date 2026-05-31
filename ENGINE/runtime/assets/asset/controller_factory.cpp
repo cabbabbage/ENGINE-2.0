@@ -24,10 +24,11 @@
 #include "animation/controllers/custom_controllers/spider_egg_controller.hpp"
 #include "animation/controllers/custom_controllers/vibble_controller.hpp"
 
-#include "animation/controllers/shared/default_custom_controller.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include "utils/utils/log.hpp"
 #include "utils/utils/string_utils.hpp"
 
+#include "animation/controllers/custom_controllers/boneski_controller.hpp"
 // <<CUSTOM_CONTROLLER_INCLUDE_INSERT_POINT>>
 
 namespace {
@@ -133,6 +134,9 @@ const std::unordered_map<std::string, ControllerFactoryFn>& controller_registry(
 
         // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
         // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
+        { "boneski_controller", [](Asset* asset) {
+                return std::make_unique<boneski_controller>(asset);
+        } },
     };
 
     return registry;
@@ -144,17 +148,17 @@ std::unique_ptr<AssetController> make_default_controller_safely(Asset* self) {
     }
 
     try {
-        return std::make_unique<animation_update::custom_controllers::DefaultCustomController>(self, true);
+        return std::make_unique<animation_update::custom_controllers::CustomControllerBase>(self, true);
     } catch (const std::bad_alloc& ex) {
-        vibble::log::error("Failed to construct fallback DefaultCustomController for asset '" +
+        vibble::log::error("Failed to construct fallback CustomControllerBase for asset '" +
                            asset_debug_name(self) + "': " + ex.what());
         return nullptr;
     } catch (const std::exception& ex) {
-        vibble::log::error("Failed to construct fallback DefaultCustomController for asset '" +
+        vibble::log::error("Failed to construct fallback CustomControllerBase for asset '" +
                            asset_debug_name(self) + "': " + ex.what());
         return nullptr;
     } catch (...) {
-        vibble::log::error("Failed to construct fallback DefaultCustomController for asset '" +
+        vibble::log::error("Failed to construct fallback CustomControllerBase for asset '" +
                            asset_debug_name(self) + "': unknown exception");
         return nullptr;
     }

@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "573f2c24e90d46b9",
+          "height": 202,
+          "order": 0,
+          "width": 417
+        }
+      ]
+    }
+  ],
+  "asset_name": "stump",
+  "authored_scale_percentage": 44.0,
+  "crop_canvas": {
+    "shared_height": 202,
+    "shared_width": 417
+  },
+  "digest": "9352095de8c7c2d5",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

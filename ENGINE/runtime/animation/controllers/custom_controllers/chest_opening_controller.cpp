@@ -8,15 +8,15 @@
 #include <vector>
 
 chest_opening_controller::chest_opening_controller(Asset* self)
-    : custom_controller_api::DefaultCustomController(self) {
+    : custom_controller_api::CustomControllerBase(self) {
 }
 
 void chest_opening_controller::on_init() {
-    custom_controller_api::DefaultCustomController::on_init();
+    custom_controller_api::CustomControllerBase::on_init();
 }
 
 void chest_opening_controller::on_update(const Input& in) {
-    custom_controller_api::DefaultCustomController::on_update(in);
+    custom_controller_api::CustomControllerBase::on_update(in);
     Asset* self = controller_self();
     if (!self) {
         return;
@@ -32,35 +32,35 @@ void chest_opening_controller::on_update(const Input& in) {
 }
 
 void chest_opening_controller::on_attack(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_attack(attack);
+    custom_controller_api::CustomControllerBase::on_attack(attack);
 }
 
 void chest_opening_controller::on_hit(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_hit(attack);
+    custom_controller_api::CustomControllerBase::on_hit(attack);
 }
 
 void chest_opening_controller::on_death() {
-    custom_controller_api::DefaultCustomController::on_death();
+    custom_controller_api::CustomControllerBase::on_death();
 }
 
 void chest_opening_controller::on_no_pending_attacks() {
-    custom_controller_api::DefaultCustomController::on_no_pending_attacks();
+    custom_controller_api::CustomControllerBase::on_no_pending_attacks();
 }
 
 void chest_opening_controller::on_orphaned_hook(Asset& self,
                                                 Asset* former_parent,
                                                 std::optional<OrphanImpulse> impulse) {
-    custom_controller_api::DefaultCustomController::on_orphaned_hook(self, former_parent, impulse);
+    custom_controller_api::CustomControllerBase::on_orphaned_hook(self, former_parent, impulse);
 }
 
 void chest_opening_controller::on_pre_delete_hook(Asset& self) {
-    custom_controller_api::DefaultCustomController::on_pre_delete_hook(self);
+    custom_controller_api::CustomControllerBase::on_pre_delete_hook(self);
 }
 
 void chest_opening_controller::on_process_pending_attacks(Asset& self_ref) {
-    custom_controller_api::DefaultCustomController::on_process_pending_attacks(self_ref);
+    custom_controller_api::CustomControllerBase::on_process_pending_attacks(self_ref);
 }
 
 void chest_opening_controller::on_interact_hook(Asset& self, Asset* instigator) {
-    custom_controller_api::DefaultCustomController::on_interact_hook(self, instigator);
+    custom_controller_api::CustomControllerBase::on_interact_hook(self, instigator);
 }

@@ -39,7 +39,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up,
         plan.final_dest = self->world_xz_point();
         stride_index = 0;
         stride_frame_counter = 0;
-        up.switch_to(animation_update::detail::kDefaultAnimation, 0);
+        up.switch_to(animation_update::detail::kDefaultAnimation, 0, AnimationRuntime::TransitionLockPolicy::Force);
         if (self) {
             self->needs_target = true;
         }
@@ -54,7 +54,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up,
             return false;
         }
         const Stride& next_stride = plan.strides[stride_index];
-        up.switch_to(next_stride.animation_id, next_stride.path_index);
+        up.switch_to(next_stride.animation_id, next_stride.path_index, AnimationRuntime::TransitionLockPolicy::Force);
         if (stride_index == plan.strides.size() - 1) {
             self->needs_target = true;
         }
@@ -123,7 +123,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up,
     const bool same_animation = (self->current_animation == stride.animation_id);
     const bool same_path = same_animation && (up.path_index_for(stride.animation_id) == stride_path);
     if (!same_animation || !same_path) {
-        up.switch_to(stride.animation_id, stride_path);
+        up.switch_to(stride.animation_id, stride_path, AnimationRuntime::TransitionLockPolicy::Force);
         stride_frame_counter = 0;
     }
 
@@ -227,7 +227,7 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up,
         plan.final_dest = axis::WorldPos{self->world_x(), self->world_y(), self->world_z()};
         stride_index = 0;
         stride_frame_counter = 0;
-        up.switch_to(animation_update::detail::kDefaultAnimation, 0);
+        up.switch_to(animation_update::detail::kDefaultAnimation, 0, AnimationRuntime::TransitionLockPolicy::Force);
         if (self) {
             self->needs_target = true;
         }
@@ -242,7 +242,7 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up,
             return false;
         }
         const Stride& next_stride = plan.strides[stride_index];
-        up.switch_to(next_stride.animation_id, next_stride.path_index);
+        up.switch_to(next_stride.animation_id, next_stride.path_index, AnimationRuntime::TransitionLockPolicy::Force);
         if (stride_index == plan.strides.size() - 1) {
             self->needs_target = true;
         }
@@ -309,7 +309,7 @@ bool MovementPlanExecutor::tick_3d(AnimationRuntime& up,
     const bool same_animation = (self->current_animation == stride.animation_id);
     const bool same_path = same_animation && (up.path_index_for(stride.animation_id) == stride_path);
     if (!same_animation || !same_path) {
-        up.switch_to(stride.animation_id, stride_path);
+        up.switch_to(stride.animation_id, stride_path, AnimationRuntime::TransitionLockPolicy::Force);
         stride_frame_counter = 0;
     }
 

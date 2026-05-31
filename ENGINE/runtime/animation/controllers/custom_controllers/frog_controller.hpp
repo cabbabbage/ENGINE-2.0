@@ -1,7 +1,7 @@
 #ifndef FROG_CONTROLLER_HPP
 #define FROG_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/custom_controller.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -10,7 +10,7 @@
 class Asset;
 class Input;
 
-class frog_controller : public CustomAssetController {
+class frog_controller : public custom_controller_api::CustomControllerBase {
 
 public:
 

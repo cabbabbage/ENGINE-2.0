@@ -111,4 +111,47 @@ class BoundarySpawnGroupModal {
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::function<void()> on_close_{};
 };
+class EdgeDetailCandidatesModal {
+ public:
+    using SaveCallback = std::function<bool()>;
+
+    EdgeDetailCandidatesModal();
+    ~EdgeDetailCandidatesModal();
+
+    void open(nlohmann::json& map_info, SaveCallback on_save);
+
+    void close();
+    bool visible() const;
+
+    void update(const Input& input);
+    bool handle_event(const SDL_Event& e);
+    void render(SDL_Renderer* r) const;
+    bool is_point_inside(int x, int y) const;
+
+    void set_screen_dimensions(int width, int height);
+    void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
+    void set_on_close(std::function<void()> cb);
+    void set_docked_bounds(const SDL_Rect& bounds);
+    void clear_docked_bounds();
+
+ private:
+    void apply_docked_bounds();
+    void ensure_visible_position();
+
+    nlohmann::json* map_info_ = nullptr;
+    nlohmann::json* entry_ = nullptr;
+    SaveCallback on_save_{};
+
+    std::unique_ptr<CandidateListPanel> panel_;
+
+    int screen_w_ = 1920;
+    int screen_h_ = 1080;
+    bool position_initialized_ = false;
+    bool docked_bounds_active_ = false;
+    SDL_Rect docked_bounds_{0, 0, 0, 0};
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
+    std::function<void()> on_close_{};
+};
 

@@ -48,7 +48,6 @@ namespace vibble::grid {
 class Occupancy;
 class Grid;
 }
-class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class RoomOvalToolsPanel;
@@ -60,6 +59,7 @@ class SlidingWindowContainer;
 class DMSlider;
 class SliderWidget;
 class DevFooterBar;
+class EdgeDetailCandidatesModal;
 class DevControls;
 namespace animation_update { struct AttackPayload; }
 namespace devmode::room_config { class AttackPayloadEditor; }
@@ -144,6 +144,11 @@ public:
     void toggle_room_config();
     void open_room_config();
     void close_room_config();
+    void toggle_edge_detail_candidates();
+    void open_edge_detail_candidates();
+    void close_edge_detail_candidates();
+    void set_edge_detail_panel_bounds(const SDL_Rect& bounds);
+    bool is_edge_detail_candidates_open() const;
     void create_room_from_footer();
     // Seeds a trail template for orthogonal centerline corridor generation (90° turns only).
     void create_trail_from_footer();
@@ -151,6 +156,7 @@ public:
     bool is_camera_settings_open() const;
     void regenerate_room();
     void regenerate_room_from_template(const std::string& template_key);
+    void generate_room_from_template_at_current_location(const std::string& template_key);
 
     using RoomAssetsSavedCallback = std::function<void()>;
     void set_room_assets_saved_callback(RoomAssetsSavedCallback cb);
@@ -410,6 +416,7 @@ private:
     void regenerate_current_room();
     void configure_shared_panel();
     void refresh_room_config_visibility();
+    void refresh_docked_panel_open_state();
     void sanitize_perimeter_spawn_groups();
     bool sanitize_perimeter_spawn_groups(nlohmann::json& groups);
     std::optional<PerimeterOverlay> compute_perimeter_overlay_for_drag();
@@ -613,6 +620,20 @@ private:
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_impassable_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
+    bool resolve_active_frame_edit_context(Asset*& out_target,
+                                           std::shared_ptr<AssetInfo>& out_info,
+                                           std::string& out_animation_id,
+                                           int& out_current_frame_index) const;
+    std::optional<std::string> active_frame_edit_disabled_reason(const Asset* target,
+                                                                 const std::string& animation_id) const;
+    std::vector<int> sanitize_footer_selected_frames(int frame_count, int fallback_frame) const;
+    bool flush_active_frame_edit_state();
+    bool apply_active_subview_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool delete_active_preview_frames(const std::vector<int>& selected_frames);
+    bool duplicate_active_preview_frames(const std::vector<int>& selected_frames);
+    bool reorder_active_preview_frames(const std::vector<int>& selected_frames, int insertion_index);
+    bool insert_active_preview_frame(int insertion_index);
+    bool replace_active_preview_frame(int frame_index);
     bool delete_asset_info_preview_frames();
     bool duplicate_asset_info_preview_frames();
     bool reorder_asset_info_preview_frames(int from_frame, int insertion_index);
@@ -792,8 +813,8 @@ private:
         devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
                                bool flush_now,
-                               const char* reason,
-                               const char* flush_tag);
+                               const char* reason = nullptr,
+                               const char* flush_tag = nullptr);
     void refresh_oval_mode_handles();
     std::unordered_set<std::string> valid_oval_center_anchor_names(const AssetInfo& info) const;
     bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;
@@ -1003,7 +1024,6 @@ private:
     std::unique_ptr<RoomBoxToolsPanel> impassable_box_tools_panel_;
     std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
-    std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
     std::unique_ptr<animation_editor::AnimationListPanel> stack_animation_list_panel_;
     std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
     std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;
@@ -1299,6 +1319,8 @@ private:
     std::optional<AssetEditorSubview> pending_animation_editor_close_subview_{};
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
+    std::unique_ptr<EdgeDetailCandidatesModal> edge_detail_candidates_modal_;
+    SDL_Rect edge_detail_panel_bounds_{0, 0, 0, 0};
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
     std::unique_ptr<SlidingWindowContainer> spawn_group_container_;
     mutable SDL_Rect spawn_group_panel_embedded_bounds_{0, 0, 0, 0};

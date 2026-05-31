@@ -24,7 +24,6 @@
 
 #include "asset_controller.hpp"
 #include "animation/attack.hpp"
-#include "rendering/render/scaling_logic.hpp"
 
 class WarpedScreenGrid;
 class Assets;
@@ -133,6 +132,7 @@ class Asset {
         }
         return cached_w;
     }
+    float runtime_scale_remainder() const;
     float runtime_resolved_scale() const;
     float runtime_width_px() const;
     float runtime_height_px() const;
@@ -179,6 +179,25 @@ class Asset {
     };
     CumulativeMovementDisplacement current_frame_cumulative_movement_displacement() const;
 
+    struct ScaleUsageStats {
+        float requested_scale = 1.0f;
+        float texture_scale   = 1.0f;
+        float remainder_scale = 1.0f;
+        int   variant_index   = 0;
+
+        float requested_percent() const { return requested_scale * 100.0f; }
+        float texture_percent() const { return texture_scale * 100.0f; }
+        float remainder_percent() const { return remainder_scale * 100.0f; }
+};
+
+    const ScaleUsageStats& last_scale_usage() const { return last_scale_usage_; }
+    struct ScaleVariantState {
+        int   last_variant_index = 0;
+        float hysteresis_min     = 0.0f;
+        float hysteresis_max     = std::numeric_limits<float>::max();
+};
+
+    const ScaleVariantState& scale_variant_state() const { return scale_variant_state_; }
 
     void set_frame_progress(float p) { frame_progress = p; }
     class AnimationFrame* current_frame = nullptr;
@@ -200,7 +219,6 @@ class Asset {
     const std::string& owning_room_name() const { return owning_room_name_; }
     void set_owning_room_name(std::string name);
     void deactivate();
-    int NeighborSearchRadius;
     void set_hidden(bool state);
     bool is_hidden() const;
     void set_default_controller_animation_enforced(bool enforced) { enforce_default_controller_animation_ = enforced; }
@@ -294,16 +312,21 @@ class Asset {
     std::unique_ptr<AnimationUpdate> anim_;
     std::unique_ptr<class AnimationRuntime> anim_runtime_;
     float current_scale = 1.00f;
+    float current_nearest_variant_scale = 1.00f;
+    float current_remaining_scale_adjustment = 1.00f;
+    int   current_variant_index = 0;
 
     // Cache the last scale inputs so we can skip redundant work when nothing changed.
     float last_scale_base_input_ = -1.0f;
     float last_scale_perspective_input_ = -1.0f;
     float last_scale_camera_input_ = -1.0f;
+    float last_scale_quality_cap_input_ = -1.0f;
     std::uint32_t last_scale_update_frame_id_ = std::numeric_limits<std::uint32_t>::max();
     std::uint64_t last_scale_update_camera_state_version_ = std::numeric_limits<std::uint64_t>::max();
 
     void update_scale_values(bool force = false);
     bool can_skip_static_runtime_update();
+    SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);
     // Queue an attack event for deferred controller handling.
     void send_attack(const animation_update::Attack& attack);
@@ -459,6 +482,7 @@ class Asset {
         int   world_y = 0;
         int   world_z = 0;
         int   frame_index = 0;
+        int   variant_index = 0;
         bool  flipped = false;
         bool  render_flip_horizontal = false;
         bool  render_flip_vertical = false;
@@ -555,11 +579,23 @@ private:
     double base_spawn_tilt_degrees_ = 0.0;
     void ensure_animation_runtime(bool force_recreate);
 
+    void clear_downscale_cache();
+    void invalidate_downscale_cache();
     void refresh_cached_dimensions();
     void recompute_local_bounds_square();
 
+    std::uint64_t downscale_cache_ready_revision_ = 0;
+
     SDL_Rect     composite_bounds_local_{0, 0, 0, 0};
 
+    SDL_Texture* last_scaled_texture_      = nullptr;
+    SDL_Texture* last_scaled_source_       = nullptr;
+    int          last_scaled_w_            = 0;
+    int          last_scaled_h_            = 0;
+    float        last_scaled_camera_scale_ = -1.0f;
+
+    ScaleUsageStats last_scale_usage_{};
+    ScaleVariantState scale_variant_state_{};
 
     void clear_render_caches();
 

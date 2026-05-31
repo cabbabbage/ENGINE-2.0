@@ -1,8 +1,7 @@
 #ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/child_asset.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include <SDL3/SDL.h>
 #include <chrono>
 #include <optional>
@@ -13,7 +12,7 @@
 class Asset;
 class Input;
 
-class vibble_controller : public CustomAssetController {
+class vibble_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     vibble_controller(Asset* player);
@@ -58,8 +57,14 @@ private:
     bool is_carrying_non_gun() const;
     void drop_carried_asset(const Input& input, int held_frames);
     void pickup_asset(Asset& player, Asset& target);
-    OrphanImpulse build_throw_impulse(const Asset& player, const Input& input, int held_frames) const;
+    bool try_fire_bullet(const Input& input);
+    OrphanImpulse build_throw_impulse(const Asset& player,
+                                      const Input& input,
+                                      int held_frames,
+                                      const Asset* carried_asset,
+                                      bool* out_throw_damage_enabled = nullptr) const;
     void update_world_carried_asset_pose();
+    void publish_aim_assist_overlay(const Input& input) const;
     void handle_sprint_dash_egg_disturbance(const Input& input);
     void drop_held_spider_egg_forced(const Input& input);
     bool is_spider_egg_asset(const Asset* asset) const;
@@ -84,6 +89,7 @@ private:
     bool isMeleeing = false;
     float meleeCooldown = 0.5f;
     std::chrono::steady_clock::time_point meleeCooldownEndTime;
+    std::chrono::steady_clock::time_point bulletCooldownEndTime_{};
     std::chrono::steady_clock::time_point nextEggDisturbanceTime_{};
 
     float subpixel_x_ = 0.0f;
@@ -94,8 +100,6 @@ private:
     bool normal_mode_active_ = false;
     float yaw_angle_degrees_ = 0.0f;
     float pitch_angle_degrees_ = 0.0f;
-    std::optional<ChildAsset> gun_child_;
-    std::optional<ChildAsset> carried_child_;
     Asset* carried_world_asset_ = nullptr;
     std::string carried_asset_name_;
 };

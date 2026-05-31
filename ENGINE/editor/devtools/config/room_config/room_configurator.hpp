@@ -126,7 +126,7 @@ private:
     void request_rebuild();
     void load_tags_from_json(const nlohmann::json& data);
     void write_tags_to_json(nlohmann::json& object) const;
-    std::string selected_geometry() const;
+    int selected_size() const;
     bool sync_state_from_widgets();
     const nlohmann::json& live_room_json() const;
     nlohmann::json& live_room_json();
@@ -146,7 +146,7 @@ private:
     void forget_collapsible(const DockableCollapsible* panel);
     bool base_panel_expanded(const std::string& key) const;
     void set_base_panel_expanded(const std::string& key, bool expanded);
-    void focus_panel(DockableCollapsible* panel);
+    void focus_panel(DockableCollapsible* panel, bool expand_on_focus = true);
     void clear_panel_focus();
     void apply_panel_focus_states();
     DockableCollapsible* panel_at_point(SDL_Point p) const;
@@ -176,8 +176,6 @@ private:
     std::size_t metadata_snapshot_hash_ = 0;
     bool is_trail_context_ = false;
 
-    std::vector<std::string> geometry_options_;
-
     std::vector<std::string> room_tags_;
     std::vector<std::string> room_anti_tags_;
     bool tags_dirty_ = false;
@@ -186,18 +184,10 @@ private:
 
     std::unique_ptr<DMTextBox> name_box_;
     std::unique_ptr<TextBoxWidget> name_widget_;
-    std::unique_ptr<DMDropdown> geometry_dropdown_;
-    std::unique_ptr<DropdownWidget> geometry_widget_;
-    std::unique_ptr<DMWeightedRangeWidget> width_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> width_range_control_;
-    std::unique_ptr<DMWeightedRangeWidget> height_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> height_range_control_;
-    int width_slider_max_range_ = 0;
-    int height_slider_max_range_ = 0;
-    std::unique_ptr<DMSlider> edge_slider_;
-    std::unique_ptr<SliderWidget> edge_widget_;
-    std::unique_ptr<DMWeightedRangeWidget> curvy_range_widget_;
-    std::unique_ptr<WeightedRangeWidget> curvy_widget_;
+    std::unique_ptr<DMNumericStepper> size_stepper_;
+    std::unique_ptr<StepperWidget> size_widget_;
+    std::unique_ptr<DMWeightedRangeWidget> coarseness_range_widget_;
+    std::unique_ptr<WeightedRangeWidget> coarseness_widget_;
     std::unique_ptr<Widget> trail_connection_sector_widget_;
     std::unique_ptr<DMNumericStepper> sector_direction_stepper_;
     std::unique_ptr<StepperWidget> sector_direction_widget_;

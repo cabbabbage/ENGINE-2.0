@@ -298,6 +298,11 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
         screen_bl.y += offset_y;
     }
 
+    const SDL_FPoint crop_screen_tl = screen_tl;
+    const SDL_FPoint crop_screen_tr = screen_tr;
+    const SDL_FPoint crop_screen_br = screen_br;
+    const SDL_FPoint crop_screen_bl = screen_bl;
+
     const double angle_degrees = std::isfinite(input.angle) ? input.angle : 0.0;
     if (std::fabs(angle_degrees) > 1e-6) {
         constexpr float kPi = 3.14159265358979323846f;
@@ -312,6 +317,11 @@ bool build_projected_sprite_frame(const WarpedScreenGrid& cam,
     out.screen_tr = screen_tr;
     out.screen_br = screen_br;
     out.screen_bl = screen_bl;
+    out.crop_screen_tl = crop_screen_tl;
+    out.crop_screen_tr = crop_screen_tr;
+    out.crop_screen_br = crop_screen_br;
+    out.crop_screen_bl = crop_screen_bl;
+    out.has_crop_screen_basis = true;
     out.frame_width_px = input.frame_width_px;
     out.frame_height_px = input.frame_height_px;
     out.final_width_px = input.final_width_px;

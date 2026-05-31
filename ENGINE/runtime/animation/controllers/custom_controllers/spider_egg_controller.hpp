@@ -1,14 +1,14 @@
 #ifndef SPIDER_EGG_CONTROLLER_HPP
 #define SPIDER_EGG_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include <cstdint>
 #include <optional>
 
 class Asset;
 class Input;
 
-class spider_egg_controller : public custom_controller_api::DefaultCustomController {
+class spider_egg_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     explicit spider_egg_controller(Asset* self);

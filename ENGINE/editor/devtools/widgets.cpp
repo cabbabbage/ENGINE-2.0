@@ -1299,6 +1299,26 @@ void DMSlider::set_tooltip_state(DMWidgetTooltipState* state) {
     }
 }
 
+void DMSlider::cancel_interaction() {
+    if (edit_box_) {
+        edit_box_->stop_editing();
+        edit_box_.reset();
+    }
+    const bool was_active = focused_ || dragging_;
+    dragging_ = false;
+    hovered_ = false;
+    knob_hovered_ = false;
+    focused_ = false;
+    set_slider_scroll_capture(this, false);
+    if (was_active) {
+        if (defer_commit_until_unfocus_) {
+            commit_pending_value();
+        } else {
+            notify_value_committed(value_);
+        }
+    }
+}
+
 void DMSlider::set_on_value_changed(std::function<void(int)> callback) {
     value_changed_callback_ = std::move(callback);
     last_notified_value_ = display_value();
@@ -1916,6 +1936,28 @@ void DMRangeSlider::set_tooltip_state(DMWidgetTooltipState* state) {
     }
 }
 
+void DMRangeSlider::cancel_interaction() {
+    if (edit_min_) {
+        edit_min_->stop_editing();
+        edit_min_.reset();
+    }
+    if (edit_max_) {
+        edit_max_->stop_editing();
+        edit_max_.reset();
+    }
+    const bool was_active = focused_ || dragging_min_ || dragging_max_;
+    dragging_min_ = false;
+    dragging_max_ = false;
+    focused_ = false;
+    hovered_ = false;
+    min_hovered_ = false;
+    max_hovered_ = false;
+    set_slider_scroll_capture(this, false);
+    if (was_active && defer_commit_until_unfocus_) {
+        commit_pending_values();
+    }
+}
+
 void DMRangeSlider::set_min_value(int v) {
     min_value_ = std::max(min_, std::min(max_, v));
     if (min_value_ > max_value_) min_value_ = max_value_;
@@ -2360,6 +2402,8 @@ constexpr int kWeightedRangeMajorTickHeight = 14;
 constexpr int kWeightedRangeImportantTickHeight = 19;
 constexpr int kWeightedRangePopupWidth = 440;
 constexpr int kWeightedRangePopupHeight = 316;
+constexpr int kWeightedRangeExpandButtonSize = 24;
+constexpr int kWeightedRangeModalCloseButtonSize = 26;
 constexpr int kWeightedRangeModalWidth = 740;
 constexpr int kWeightedRangeModalHeight = 430;
 
@@ -2579,14 +2623,17 @@ void DMWeightedRangeWidget::sync_value_from_popup_controls() {
 }
 
 void DMWeightedRangeWidget::update_popup_geometry() {
-    const int fallback_w = std::max(rect_.w + 48, kWeightedRangeModalWidth);
-    const int fallback_h = std::max(rect_.h + 48, kWeightedRangeModalHeight);
-    popup_rect_ = SDL_Rect{
-        rect_.x + (rect_.w - fallback_w) / 2,
-        rect_.y + (rect_.h - fallback_h) / 2,
-        fallback_w,
-        fallback_h
-    };
+    const bool keep_modal_rect = popup_open_ && active_expanded_ == this && popup_rect_.w > 0 && popup_rect_.h > 0;
+    if (!keep_modal_rect) {
+        const int fallback_w = std::max(rect_.w + 48, kWeightedRangeModalWidth);
+        const int fallback_h = std::max(rect_.h + 48, kWeightedRangeModalHeight);
+        popup_rect_ = SDL_Rect{
+            rect_.x + (rect_.w - fallback_w) / 2,
+            rect_.y + (rect_.h - fallback_h) / 2,
+            fallback_w,
+            fallback_h
+        };
+    }
     if (!popup_open_) {
         return;
     }
@@ -2617,10 +2664,19 @@ void DMWeightedRangeWidget::update_hover(SDL_Point point) {
 
 SDL_Rect DMWeightedRangeWidget::popup_toggle_rect() const {
     return SDL_Rect{
-        rect_.x + rect_.w - 96,
-        rect_.y + 5,
-        88,
-        20
+        rect_.x + rect_.w - kWeightedRangeExpandButtonSize - 8,
+        rect_.y + 4,
+        kWeightedRangeExpandButtonSize,
+        kWeightedRangeExpandButtonSize
+    };
+}
+
+SDL_Rect DMWeightedRangeWidget::popup_close_rect() const {
+    return SDL_Rect{
+        popup_rect_.x + std::max(0, popup_rect_.w - kWeightedRangeModalCloseButtonSize - 10),
+        popup_rect_.y + 8,
+        kWeightedRangeModalCloseButtonSize,
+        kWeightedRangeModalCloseButtonSize
     };
 }
 
@@ -2917,11 +2973,13 @@ bool DMWeightedRangeWidget::toggle_popup_editor() {
     popup_open_ = !popup_open_;
     if (popup_open_) {
         active_expanded_ = this;
+        active_selected_ = this;
         ensure_popup_controls();
         sync_popup_controls_from_value();
         set_slider_scroll_capture(this, true);
     } else if (active_expanded_ == this) {
         active_expanded_ = nullptr;
+        set_slider_scroll_capture(this, false);
     }
     update_popup_geometry();
     return true;
@@ -3184,15 +3242,26 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
         update_hover(p);
         const bool inside_widget = SDL_PointInRect(&p, &rect_);
         const bool inside_popup = popup_open_ && SDL_PointInRect(&p, &popup_rect());
-        if (modal_active && !inside_popup && !inside_widget) {
+        if (modal_active) {
             used = true;
+            if (e.button.button != SDL_BUTTON_LEFT) {
+                break;
+            }
+            if (inside_popup) {
+                select_widget();
+                if (SDL_PointInRect(&p, &popup_close_rect())) {
+                    popup_open_ = false;
+                    active_expanded_ = nullptr;
+                    set_slider_scroll_capture(this, false);
+                    break;
+                }
+                if (!begin_drag(p)) {
+                    selected_node_index_ = -1;
+                }
+            }
             break;
         }
         if (!inside_widget) {
-            if (inside_popup) {
-                used = true;
-                break;
-            }
             if (e.button.button == SDL_BUTTON_LEFT && is_selected()) {
                 deselect();
             }
@@ -3294,6 +3363,7 @@ bool DMWeightedRangeWidget::handle_event(const SDL_Event& e) {
             if (active_expanded_ == this) {
                 active_expanded_ = nullptr;
             }
+            set_slider_scroll_capture(this, false);
             used = true;
         }
         break;
@@ -3364,7 +3434,13 @@ void DMWeightedRangeWidget::render(SDL_Renderer* r) const {
     }
     dm_draw::DrawRoundedSolidRect(r, popup_btn, 4, popup_fill);
     dm_draw::DrawRoundedOutline(r, popup_btn, 4, 1, border);
-    DMFontCache::instance().draw_text(r, label_style, popup_open_ ? "Close" : "Expand", popup_btn.x + 18, popup_btn.y + 3);
+    const SDL_Color icon_col = popup_open_ ? SDL_Color{235, 244, 255, 255} : label_style.color;
+    SDL_SetRenderDrawColor(r, icon_col.r, icon_col.g, icon_col.b, icon_col.a);
+    const int inset = 6;
+    SDL_Rect maximize_icon{popup_btn.x + inset, popup_btn.y + inset, popup_btn.w - (inset * 2), popup_btn.h - (inset * 2)};
+    sdl_render::Rect(r, &maximize_icon);
+    SDL_RenderLine(r, maximize_icon.x + maximize_icon.w - 4, maximize_icon.y, maximize_icon.x + maximize_icon.w, maximize_icon.y);
+    SDL_RenderLine(r, maximize_icon.x + maximize_icon.w, maximize_icon.y, maximize_icon.x + maximize_icon.w, maximize_icon.y + 4);
 
     const SDL_Rect hist = histogram_rect();
     SDL_Color grid{76, 86, 110, 120};
@@ -3552,7 +3628,22 @@ bool DMWeightedRangeWidget::handle_active_expanded_event(const SDL_Event& e) {
     if (!has_active_expanded()) {
         return false;
     }
-    return active_expanded_->handle_event(e);
+    const bool handled = active_expanded_->handle_event(e);
+    if (handled) {
+        return true;
+    }
+    switch (e.type) {
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+    case SDL_EVENT_MOUSE_MOTION:
+    case SDL_EVENT_MOUSE_WHEEL:
+    case SDL_EVENT_TEXT_INPUT:
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        return true;
+    default:
+        return false;
+    }
 }
 
 void DMWeightedRangeWidget::render_active_expanded(SDL_Renderer* r) {
@@ -3588,6 +3679,21 @@ void DMWeightedRangeWidget::render_active_expanded(SDL_Renderer* r) {
                              DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
     dm_draw::DrawRoundedOutline(r, popup, DMStyles::CornerRadius(), 2, SDL_Color{120, 172, 255, 255});
     DMFontCache::instance().draw_text(r, label_style, "Weighted Random Range Editor", popup.x + 16, popup.y + 12);
+
+    const SDL_Rect close_btn = w->popup_close_rect();
+    SDL_Color close_fill = DMStyles::ButtonBaseFill();
+    int mx = 0;
+    int my = 0;
+    sdl_mouse_util::GetMouseState(&mx, &my);
+    SDL_Point mouse_point{mx, my};
+    if (SDL_PointInRect(&mouse_point, &close_btn)) {
+        close_fill = DMStyles::ButtonHoverFill();
+    }
+    dm_draw::DrawRoundedSolidRect(r, close_btn, 5, close_fill);
+    dm_draw::DrawRoundedOutline(r, close_btn, 5, 1, SDL_Color{164, 184, 220, 255});
+    SDL_SetRenderDrawColor(r, 244, 248, 255, 255);
+    SDL_RenderLine(r, close_btn.x + 8, close_btn.y + 8, close_btn.x + close_btn.w - 8, close_btn.y + close_btn.h - 8);
+    SDL_RenderLine(r, close_btn.x + close_btn.w - 8, close_btn.y + 8, close_btn.x + 8, close_btn.y + close_btn.h - 8);
 
     const SDL_Rect pop_hist = w->popup_histogram_rect();
     SDL_SetRenderDrawColor(r, 82, 94, 122, 170);
@@ -3636,6 +3742,25 @@ DMDropdown::~DMDropdown() {
 DMDropdown* DMDropdown::active_ = nullptr;
 
 DMDropdown* DMDropdown::active_dropdown() { return active_; }
+
+void DMDropdown::cancel_active_dropdown(bool commit_pending) {
+    if (active_) {
+        active_->cancel_interaction(commit_pending);
+    }
+}
+
+void DMDropdown::cancel_interaction(bool commit_pending) {
+    if (focused_ && active_ == this && commit_pending) {
+        commit_pending_selection();
+    }
+    focused_ = false;
+    has_pending_index_ = false;
+    hovered_ = false;
+    hovered_option_index_ = -1;
+    if (active_ == this) {
+        active_ = nullptr;
+    }
+}
 
 struct DMDropdown::OptionEntry {
     int index = 0;
@@ -3885,6 +4010,15 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.button.timestamp == last_mouse_down_timestamp_ &&
+            e.button.x == last_mouse_down_x_ &&
+            e.button.y == last_mouse_down_y_) {
+            return true;
+        }
+        last_mouse_down_timestamp_ = e.button.timestamp;
+        last_mouse_down_x_ = e.button.x;
+        last_mouse_down_y_ = e.button.y;
+
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {

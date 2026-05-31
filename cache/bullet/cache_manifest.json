@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "a69df81aceb370d2",
+          "height": 34,
+          "order": 0,
+          "width": 53
+        }
+      ]
+    }
+  ],
+  "asset_name": "bullet",
+  "authored_scale_percentage": 12.0,
+  "crop_canvas": {
+    "shared_height": 34,
+    "shared_width": 53
+  },
+  "digest": "8f3a1ef1d403f680",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

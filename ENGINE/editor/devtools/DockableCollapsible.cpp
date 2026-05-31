@@ -615,6 +615,24 @@ void DockableCollapsible::update(const Input& input, int screen_w, int screen_h)
     int my = input.getY();
 }
 
+void DockableCollapsible::cancel_child_interactions() {
+    dragging_ = false;
+    header_dragging_via_button_ = false;
+    drag_exceeded_threshold_ = false;
+    if (header_btn_) header_btn_->cancel_interaction();
+    if (close_btn_) close_btn_->cancel_interaction();
+    if (lock_btn_) lock_btn_->cancel_interaction();
+    for (auto& row : rows_) {
+        for (Widget* widget : row) {
+            if (widget) {
+                widget->cancel_interaction();
+            }
+        }
+    }
+    DMDropdown::cancel_active_dropdown();
+    DMWidgetsClearSliderScrollCaptures();
+}
+
 bool DockableCollapsible::handle_event(const SDL_Event& e) {
     if (!visible_ || !embedded_interaction_enabled_) return false;
 

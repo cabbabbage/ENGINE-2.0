@@ -131,6 +131,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMWeightedRangeWidget> wr_y_pos_range_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
+    std::unique_ptr<DMCheckbox>  c_crop_on_load_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
     std::vector<std::unique_ptr<Widget>> widgets_;
@@ -204,6 +205,7 @@ inline void Section_BasicInfo::build() {
         c_flipable_.reset();
     }
     c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
+    c_crop_on_load_ = std::make_unique<DMCheckbox>("Crop on Load", info_->crop_on_load);
 
     auto w_type = std::make_unique<DropdownWidget>(dd_type_.get());
     rows.push_back({ w_type.get() });
@@ -256,6 +258,10 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tillable.get() });
     widgets_.push_back(std::move(w_tillable));
 
+    auto w_crop_on_load = std::make_unique<CheckboxWidget>(c_crop_on_load_.get());
+    rows.push_back({ w_crop_on_load.get() });
+    widgets_.push_back(std::move(w_crop_on_load));   
+
     if (!apply_btn_) {
         apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
     }
@@ -281,6 +287,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
+        if (c_crop_on_load_ && c_crop_on_load_->handle_event(e)) used = true;
     }
     if (!used) {
         used = DockableCollapsible::handle_event(e);
@@ -344,6 +351,11 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         changed = true;
         tile_changed = true;
         rebuild_needed = true;
+    }
+    if (c_crop_on_load_ && info_->crop_on_load != c_crop_on_load_->value()) {
+        info_->set_crop_on_load(c_crop_on_load_->value());
+        changed = true;
+        render_settings_changed = true;
     }
 
     if (changed) {
@@ -580,9 +592,6 @@ class Section_Spacing : public DockableCollapsible {
       }
       s_min_same_ = std::make_unique<DMSlider>( "Min Distance From Same Type", 0, 2000, std::max(0, info_->min_same_type_distance));
       s_min_all_  = std::make_unique<DMSlider>( "Min Distance From All Assets", 0, 2000, std::max(0, info_->min_distance_all));
-      int neighbor_distance = info_->NeighborSearchRadius > 0 ? info_->NeighborSearchRadius : 500;
-      neighbor_distance = std::clamp(neighbor_distance, 20, 1000);
-      s_neighbor_search_ = std::make_unique<DMSlider>("Neighbor Search Distance", 20, 1000, neighbor_distance);
 
       auto w_same = std::make_unique<SliderWidget>(s_min_same_.get());
       rows.push_back({ w_same.get() });
@@ -591,10 +600,6 @@ class Section_Spacing : public DockableCollapsible {
       auto w_all = std::make_unique<SliderWidget>(s_min_all_.get());
       rows.push_back({ w_all.get() });
       widgets_.push_back(std::move(w_all));
-
-      auto w_neighbor = std::make_unique<SliderWidget>(s_neighbor_search_.get());
-      rows.push_back({ w_neighbor.get() });
-      widgets_.push_back(std::move(w_neighbor));
 
       if (!apply_btn_) {
         apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
@@ -617,7 +622,6 @@ class Section_Spacing : public DockableCollapsible {
       if (info_ && expanded_) {
         if (s_min_same_ && s_min_same_->handle_event(e)) used = true;
         if (s_min_all_ && s_min_all_->handle_event(e)) used = true;
-        if (s_neighbor_search_ && s_neighbor_search_->handle_event(e)) used = true;
       }
       if (!used) {
         used = DockableCollapsible::handle_event(e);
@@ -634,11 +638,6 @@ class Section_Spacing : public DockableCollapsible {
       if (s_min_all_ && info_->min_distance_all != s_min_all_->value()) {
         int v = std::max(0, s_min_all_->value());
         info_->set_min_distance_all(v);
-        changed = true;
-      }
-      if (s_neighbor_search_ && info_->NeighborSearchRadius != s_neighbor_search_->value()) {
-        int v = std::clamp(s_neighbor_search_->value(), 20, 1000);
-        info_->set_neighbor_search_radius(v);
         changed = true;
       }
       if (changed) {
@@ -663,7 +662,6 @@ class Section_Spacing : public DockableCollapsible {
   private:
     std::unique_ptr<DMSlider> s_min_same_;
     std::unique_ptr<DMSlider> s_min_all_;
-    std::unique_ptr<DMSlider> s_neighbor_search_;
     std::vector<std::unique_ptr<Widget>> widgets_;
     std::unique_ptr<DMButton> apply_btn_;
     AssetInfoUI* ui_ = nullptr;
@@ -824,7 +822,6 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
         case AssetInfoSectionId::Spacing:
             changed |= copy_key("min_same_type_distance");
             changed |= copy_key("min_distance_all");
-            changed |= copy_key("neighbor_search_distance");
             break;
     }
     return changed;
@@ -883,7 +880,7 @@ AssetInfoUI::AssetInfoUI() {
     container_.set_header_text_provider([this]() { return info_ ? info_->name : std::string(); });
 
     container_.set_scrollbar_visible(true);
-    container_.set_content_clip_enabled(false);
+    container_.set_content_clip_enabled(true);
 
     container_.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
         int y = ctx.content_top;
@@ -940,6 +937,17 @@ AssetInfoUI::AssetInfoUI() {
     });
 
     container_.set_on_close([this]() { this->close(); });
+
+    container_.set_cancel_function([this]() {
+        for (auto& section : sections_) {
+            if (section) {
+                section->cancel_child_interactions();
+            }
+        }
+        if (controller_action_btn_) controller_action_btn_->cancel_interaction();
+        if (duplicate_btn_) duplicate_btn_->cancel_interaction();
+        if (delete_btn_) delete_btn_->cancel_interaction();
+    });
 
     container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
         if (panel_bounds_override_active_) {
@@ -2274,7 +2282,7 @@ void AssetInfoUI::apply_section_focus_states() {
     }
 }
 
-void AssetInfoUI::focus_section(DockableCollapsible* section) {
+void AssetInfoUI::focus_section(DockableCollapsible* section, bool expand_on_focus) {
     DockableCollapsible* resolved = nullptr;
     if (section) {
         for (auto& entry : sections_) {
@@ -2290,7 +2298,7 @@ void AssetInfoUI::focus_section(DockableCollapsible* section) {
     apply_section_focus_states();
     if (focused_section_) {
         focused_section_->force_pointer_ready();
-        if (!focused_section_->is_expanded()) {
+        if (expand_on_focus && !focused_section_->is_expanded()) {
             focused_section_->set_expanded(true);
         }
     }
@@ -2344,7 +2352,7 @@ bool AssetInfoUI::handle_section_focus_event(const SDL_Event& e) {
     if (target == focused_section_) {
         return false;
     }
-    focus_section(target);
+    focus_section(target, false);
     // Keep processing this same event through the newly focused section so
     // controls react on first click instead of requiring a second click.
     return false;
@@ -2583,8 +2591,6 @@ void AssetInfoUI::sync_target_spacing_settings() {
         }
         asset->info->set_min_same_type_distance(info_->min_same_type_distance);
         asset->info->set_min_distance_all(info_->min_distance_all);
-        asset->info->set_neighbor_search_radius(info_->NeighborSearchRadius);
-        asset->NeighborSearchRadius = info_->NeighborSearchRadius;
         asset->clear_grid_residency_cache();
     });
 

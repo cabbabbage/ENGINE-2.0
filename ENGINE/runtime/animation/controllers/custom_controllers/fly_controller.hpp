@@ -1,11 +1,10 @@
 #pragma once
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/controllers/shared/random_orbit_3d_controller_behavior.hpp"
+#include "animation/controllers/custom_controller.hpp"
 
 class Asset;
 class Input;
 
-class fly_controller : public CustomAssetController {
+class fly_controller : public custom_controller_api::CustomControllerBase {
 public:
     explicit fly_controller(Asset* self);
     ~fly_controller() override = default;
@@ -16,6 +15,6 @@ protected:
     void on_process_pending_attacks(Asset& self) override;
 
 private:
-    animation_update::custom_controllers::RandomOrbit3DControllerBehavior orbit_behavior_;
+    float orbit_angle_radians_ = 0.0f;
 
 };

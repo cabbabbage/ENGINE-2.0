@@ -380,13 +380,25 @@ public:
               std::string ownership_label,
               std::optional<SDL_Color> ownership_color,
               SaveCallback on_save,
-              RegenCallback on_regen) {
+              RegenCallback on_regen,
+              bool include_position_jitter = true,
+              std::string panel_title = {},
+              std::string resolution_field = "grid_resolution",
+              bool use_spawn_group_defaults = true,
+              int resolution_min = kMapWideGridResolutionMin,
+              int resolution_max = kMapWideGridResolutionMax) {
         entry_ = entry;
         default_display_name_ = std::move(default_display_name);
         ownership_label_ = std::move(ownership_label);
         ownership_color_ = ownership_color;
         save_callback_ = std::move(on_save);
         regen_callback_ = std::move(on_regen);
+        include_position_jitter_ = include_position_jitter;
+        panel_title_override_ = std::move(panel_title);
+        resolution_field_ = resolution_field.empty() ? std::string{"grid_resolution"} : std::move(resolution_field);
+        use_spawn_group_defaults_ = use_spawn_group_defaults;
+        resolution_min_ = std::clamp(resolution_min, 0, vibble::grid::kMaxResolution);
+        resolution_max_ = std::clamp(resolution_max, resolution_min_, vibble::grid::kMaxResolution);
 
         if (!ownership_label_.empty()) {
             if (!ownership_label_widget_) ownership_label_widget_ = std::make_unique<LabelWidget>();
@@ -407,13 +419,18 @@ public:
         if (!candidate_set_header_) {
             candidate_set_header_ = std::make_unique<LabelWidget>();
         }
-        if (!regen_button_) {
-            regen_button_ = std::make_unique<DMButton>("Regenerate Map Assets",
-                                                       &DMStyles::AccentButton(),
-                                                       200,
-                                                       DMButton::height());
-            regen_button_widget_ =
-                std::make_unique<ButtonWidget>(regen_button_.get(), [this]() { this->handle_regen(); });
+        if (regen_callback_) {
+            if (!regen_button_) {
+                regen_button_ = std::make_unique<DMButton>("Regenerate Map Assets",
+                                                           &DMStyles::AccentButton(),
+                                                           200,
+                                                           DMButton::height());
+                regen_button_widget_ =
+                    std::make_unique<ButtonWidget>(regen_button_.get(), [this]() { this->handle_regen(); });
+            }
+        } else {
+            regen_button_widget_.reset();
+            regen_button_.reset();
         }
         if (!pie_widget_) {
             pie_widget_ = std::make_unique<CandidateEditorPieGraphWidget>();
@@ -438,8 +455,8 @@ public:
         const int resolution = current_grid_resolution();
         if (!grid_resolution_stepper_) {
             grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (2^r px)",
-                                                                          kMapWideGridResolutionMin,
-                                                                          kMapWideGridResolutionMax,
+                                                                          resolution_min_,
+                                                                          resolution_max_,
                                                                           resolution);
             grid_resolution_stepper_->set_step(1);
             grid_resolution_stepper_->set_on_change([this](int value) { this->update_grid_resolution(value); });
@@ -448,25 +465,37 @@ public:
             grid_resolution_stepper_->set_value(resolution);
         }
 
-        const int jitter = current_position_jitter();
-        if (!position_jitter_stepper_) {
-            position_jitter_stepper_ = std::make_unique<DMNumericStepper>("Position Jitter (px)",
-                                                                          kMapWidePositionJitterMin,
-                                                                          kMapWidePositionJitterMax,
-                                                                          jitter);
-            position_jitter_stepper_->set_step(1);
-            position_jitter_stepper_->set_on_change([this](int value) { this->update_position_jitter(value); });
-            position_jitter_widget_ = std::make_unique<StepperWidget>(position_jitter_stepper_.get());
+        if (include_position_jitter_) {
+            const int jitter = current_position_jitter();
+            if (!position_jitter_stepper_) {
+                position_jitter_stepper_ = std::make_unique<DMNumericStepper>("Position Jitter (px)",
+                                                                              kMapWidePositionJitterMin,
+                                                                              kMapWidePositionJitterMax,
+                                                                              jitter);
+                position_jitter_stepper_->set_step(1);
+                position_jitter_stepper_->set_on_change([this](int value) { this->update_position_jitter(value); });
+                position_jitter_widget_ = std::make_unique<StepperWidget>(position_jitter_stepper_.get());
+            } else {
+                position_jitter_stepper_->set_value(jitter);
+            }
         } else {
-            position_jitter_stepper_->set_value(jitter);
+            position_jitter_stepper_.reset();
+            position_jitter_widget_.reset();
         }
 
         if (entry_) {
-            (*entry_)["grid_resolution"] = resolution;
-            (*entry_)["position_jitter_px"] = jitter;
+            (*entry_)[resolution_field_] = resolution;
+            if (include_position_jitter_) {
+                (*entry_)["position_jitter_px"] = current_position_jitter();
+            } else {
+                entry_->erase("position_jitter_px");
+                entry_->erase("jitter");
+            }
         }
 
-        if (!ownership_label_.empty()) {
+        if (!panel_title_override_.empty()) {
+            set_title(panel_title_override_);
+        } else if (!ownership_label_.empty()) {
             set_title(ownership_label_ + " Candidates");
         } else {
             set_title("Map-wide Candidates");
@@ -532,8 +561,17 @@ private:
 
     bool sanitize_entry() {
         if (!entry_) return false;
-        bool changed = devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
-        changed = devmode::spawn::sanitize_spawn_group_candidates(*entry_) || changed;
+        bool changed = false;
+        if (use_spawn_group_defaults_) {
+            changed = devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
+            changed = devmode::spawn::sanitize_spawn_group_candidates(*entry_) || changed;
+        } else {
+            if (!entry_->is_object()) {
+                *entry_ = json::object();
+                changed = true;
+            }
+            changed = ensure_null_candidate_entry(*entry_) || changed;
+        }
         return changed;
     }
 
@@ -555,9 +593,13 @@ private:
             rows.push_back({ownership_label_widget_.get()});
         }
 
-        const std::string display_name = read_string_field_no_throw(*entry_, "display_name", default_display_name_);
         if (display_name_widget_) {
-            display_name_widget_->set_text("Spawn group: " + display_name);
+            if (use_spawn_group_defaults_) {
+                const std::string display_name = read_string_field_no_throw(*entry_, "display_name", default_display_name_);
+                display_name_widget_->set_text("Spawn group: " + display_name);
+            } else {
+                display_name_widget_->set_text("Map-wide edge detail candidate pool");
+            }
             display_name_widget_->set_subtle(true);
             rows.push_back({display_name_widget_.get()});
         }
@@ -583,7 +625,7 @@ private:
             rows.push_back({grid_resolution_widget_.get()});
         }
 
-        if (position_jitter_widget_ && position_jitter_stepper_) {
+        if (include_position_jitter_ && position_jitter_widget_ && position_jitter_stepper_) {
             const int jitter = current_position_jitter();
             position_jitter_stepper_->set_value(jitter);
             rows.push_back({position_jitter_widget_.get()});
@@ -598,7 +640,11 @@ private:
 
     void adjust_candidate_weight(int index, double delta) {
         if (!entry_ || std::abs(delta) < 1e-9) return;
-        devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
+        if (use_spawn_group_defaults_) {
+            devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
+        } else if (!entry_->is_object()) {
+            *entry_ = json::object();
+        }
         auto& candidates = (*entry_)["candidates"];
         if (!candidates.is_array() || index < 0 || index >= static_cast<int>(candidates.size())) return;
         auto& candidate = candidates[index];
@@ -675,21 +721,21 @@ private:
     }
 
     int current_grid_resolution() const {
-        if (!entry_) return kMapWideGridResolutionMin;
-        int value = vibble::spawn_group_codec::read_int_field(*entry_, "grid_resolution", kMapWideGridResolutionMin);
+        if (!entry_) return resolution_min_;
+        int value = vibble::spawn_group_codec::read_int_field(*entry_, resolution_field_.c_str(), resolution_min_);
         return clamp_map_grid_resolution(value);
     }
 
-    static int clamp_map_grid_resolution(int value) {
-        int clamped = std::clamp(value, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+    int clamp_map_grid_resolution(int value) const {
+        int clamped = std::clamp(value, resolution_min_, resolution_max_);
         clamped = vibble::grid::clamp_resolution(clamped);
-        return std::clamp(clamped, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+        return std::clamp(clamped, resolution_min_, resolution_max_);
     }
 
     void update_grid_resolution(int value) {
         if (!entry_) return;
         const int resolved = clamp_map_grid_resolution(value);
-        (*entry_)["grid_resolution"] = resolved;
+        (*entry_)[resolution_field_] = resolved;
         notify_save(false);
     }
 
@@ -716,6 +762,12 @@ private:
     std::unique_ptr<StepperWidget> grid_resolution_widget_{};
     std::unique_ptr<DMNumericStepper> position_jitter_stepper_{};
     std::unique_ptr<StepperWidget> position_jitter_widget_{};
+    bool include_position_jitter_ = true;
+    std::string panel_title_override_{};
+    std::string resolution_field_{"grid_resolution"};
+    int resolution_min_ = kMapWideGridResolutionMin;
+    int resolution_max_ = kMapWideGridResolutionMax;
+    bool use_spawn_group_defaults_ = true;
 
     int current_position_jitter() const {
         if (!entry_) return kMapWidePositionJitterMin;
@@ -999,20 +1051,6 @@ private:
         return std::clamp(value, kRadiusMin, kMaxSpawnFromRoomMax);
     }
 
-
-    void set_max_spawn_from_room(int value) {
-        if (!section_) return;
-        if (!section_->is_object()) {
-            *section_ = json::object();
-        }
-        const int clamped = std::clamp(value, kRadiusMin, kMaxSpawnFromRoomMax);
-        (*section_)["max_spawn_from_room"] = clamped;
-        notify_save(false);
-        if (assets_) {
-            assets_->notify_dynamic_spawn_distance_changed();
-        }
-    }
-
     static int clamp_jitter(int value) {
         if (!std::isfinite(static_cast<double>(value))) return 0;
         return std::clamp(value, 0, kMaxBoundaryJitter);
@@ -1157,26 +1195,6 @@ private:
 
         if (add_button_widget_) {
             rows.push_back({add_button_widget_.get()});
-        }
-
-        const int max_spawn_from_room = current_max_spawn_from_room();
-        if (!max_spawn_from_room_slider_) {
-            max_spawn_from_room_slider_ = std::make_unique<DMSlider>(
-                "Max Spawn From Room (px)",
-                kRadiusMin,
-                kMaxSpawnFromRoomMax,
-                max_spawn_from_room);
-            max_spawn_from_room_slider_->set_on_value_changed([this](int value) {
-                this->set_max_spawn_from_room(value);
-            });
-            max_spawn_from_room_widget_ =
-                std::make_unique<SliderWidget>(max_spawn_from_room_slider_.get());
-        }
-        if (max_spawn_from_room_slider_) {
-            max_spawn_from_room_slider_->set_value(max_spawn_from_room);
-        }
-        if (max_spawn_from_room_widget_) {
-            rows.push_back({max_spawn_from_room_widget_.get()});
         }
 
         auto search_extras = std::make_shared<std::vector<SearchAssets::Result>>(build_candidate_search_extra_results());
@@ -1517,8 +1535,6 @@ private:
     std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
-    std::unique_ptr<DMSlider> max_spawn_from_room_slider_{};
-    std::unique_ptr<SliderWidget> max_spawn_from_room_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
     int pie_callback_depth_ = 0;
     bool pending_rebuild_ = false;
@@ -1840,6 +1856,159 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
     SDL_Rect rect = panel_->rect();
     constexpr int kPreferredWidth = 380;
     constexpr int kPreferredHeight = 520;
+
+    DockManager::PanelInfo info;
+    info.panel = panel_.get();
+    info.force_layout = true;
+    info.preferred_width = rect.w > 0 ? std::max(rect.w, kPreferredWidth) : kPreferredWidth;
+    int resolved_height = rect.h > 0 ? rect.h : panel_->height();
+    if (resolved_height <= 0) {
+        resolved_height = kPreferredHeight;
+    }
+    info.preferred_height = std::max(resolved_height, kPreferredHeight);
+
+    std::vector<DockManager::PanelInfo> panels;
+    panels.push_back(info);
+    DockManager::instance().layoutAll(panels);
+
+    position_initialized_ = true;
+}
+
+EdgeDetailCandidatesModal::EdgeDetailCandidatesModal() = default;
+EdgeDetailCandidatesModal::~EdgeDetailCandidatesModal() = default;
+
+void EdgeDetailCandidatesModal::set_on_close(std::function<void()> cb) {
+    on_close_ = std::move(cb);
+    if (panel_) {
+        panel_->set_on_close([this]() {
+            if (on_close_) on_close_();
+        });
+    }
+}
+
+void EdgeDetailCandidatesModal::open(json& map_info, SaveCallback on_save) {
+    map_info_ = &map_info;
+    on_save_ = std::move(on_save);
+    entry_ = &(*map_info_)["edge_detail_candidates"];
+    if (!entry_->is_object()) {
+        *entry_ = json::object();
+    }
+
+    if (!panel_) panel_ = std::make_unique<CandidateListPanel>();
+    panel_->set_screen_dimensions(screen_w_, screen_h_);
+    panel_->set_manifest_store(manifest_store_);
+    panel_->set_assets(assets_);
+    panel_->bind(entry_,
+                 "Edge Details",
+                 "Map-wide Edge Detail",
+                 std::optional<SDL_Color>{SDL_Color{120, 190, 255, 255}},
+                 [this]() {
+                     if (on_save_) on_save_();
+                 },
+                 {},
+                 false,
+                 "Map-wide Edge Detail Candidates",
+                 "resolution",
+                 false,
+                 0,
+                 vibble::grid::kMaxResolution);
+    panel_->set_on_close([this]() {
+        if (on_close_) on_close_();
+    });
+    panel_->set_floatable(false);
+    panel_->set_close_button_on_left(false);
+    panel_->set_close_button_enabled(true);
+
+    panel_->open();
+    panel_->force_pointer_ready();
+    position_initialized_ = false;
+    apply_docked_bounds();
+    ensure_visible_position();
+}
+
+void EdgeDetailCandidatesModal::close() {
+    if (panel_) panel_->close();
+}
+
+bool EdgeDetailCandidatesModal::visible() const {
+    return panel_ && panel_->is_visible();
+}
+
+void EdgeDetailCandidatesModal::update(const Input& input) {
+    if (panel_) {
+        apply_docked_bounds();
+        panel_->update(input, screen_w_, screen_h_);
+    }
+}
+
+bool EdgeDetailCandidatesModal::handle_event(const SDL_Event& e) {
+    if (!panel_) return false;
+    return panel_->handle_event(e);
+}
+
+void EdgeDetailCandidatesModal::render(SDL_Renderer* r) const {
+    if (panel_) panel_->render(r);
+}
+
+bool EdgeDetailCandidatesModal::is_point_inside(int x, int y) const {
+    if (!panel_) return false;
+    return panel_->is_point_inside(x, y);
+}
+
+void EdgeDetailCandidatesModal::set_screen_dimensions(int width, int height) {
+    screen_w_ = std::max(width, 0);
+    screen_h_ = std::max(height, 0);
+    if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
+    apply_docked_bounds();
+    position_initialized_ = false;
+    ensure_visible_position();
+}
+
+void EdgeDetailCandidatesModal::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (panel_) panel_->set_manifest_store(manifest_store_);
+}
+
+void EdgeDetailCandidatesModal::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (panel_) panel_->set_assets(assets_);
+}
+
+void EdgeDetailCandidatesModal::set_docked_bounds(const SDL_Rect& bounds) {
+    docked_bounds_ = bounds;
+    docked_bounds_active_ = bounds.w > 0 && bounds.h > 0;
+    apply_docked_bounds();
+}
+
+void EdgeDetailCandidatesModal::clear_docked_bounds() {
+    docked_bounds_active_ = false;
+    docked_bounds_ = SDL_Rect{0, 0, 0, 0};
+}
+
+void EdgeDetailCandidatesModal::apply_docked_bounds() {
+    if (!panel_ || !docked_bounds_active_) {
+        return;
+    }
+    panel_->set_work_area(SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)});
+    panel_->set_available_height_override(std::max(0, docked_bounds_.h));
+    panel_->set_visible_height(std::max(0, docked_bounds_.h));
+    panel_->set_rect(docked_bounds_);
+}
+
+void EdgeDetailCandidatesModal::ensure_visible_position() {
+    if (!panel_) return;
+    if (docked_bounds_active_) {
+        apply_docked_bounds();
+        position_initialized_ = true;
+        return;
+    }
+    if (position_initialized_) return;
+
+    panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+
+    SDL_Rect rect = panel_->rect();
+    constexpr int kPreferredWidth = 380;
+    constexpr int kPreferredHeight = 460;
 
     DockManager::PanelInfo info;
     info.panel = panel_.get();

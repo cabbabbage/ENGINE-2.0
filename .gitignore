@@ -2,7 +2,6 @@
 vcpkg
 build/
 og_art
-cache
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -42,3 +41,5 @@ codex_playtest_stdout.log
 codex_playtest_stderr.log
 codex_playtest_metadata.json
 *.codex_prev
+# Generated shader bytecode/packages
+ENGINE/runtime/rendering/shaders/spirv/*.spv

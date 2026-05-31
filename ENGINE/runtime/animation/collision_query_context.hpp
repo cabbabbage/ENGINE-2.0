@@ -30,13 +30,11 @@ struct CollisionQueryContext {
         entries.clear();
     }
 
-    static int resolve_search_radius(int neighbor_radius,
-                                     int furthest_checkpoint_distance_px,
+    static int resolve_search_radius(int furthest_checkpoint_distance_px,
                                      int max_radius_cap) {
-        const int neighbor = std::max(0, neighbor_radius);
         const int checkpoint_extent = std::max(0, furthest_checkpoint_distance_px);
         const int checkpoint_radius = checkpoint_extent + kCheckpointPaddingPx;
-        const int requested = std::max(neighbor, checkpoint_radius);
+        const int requested = std::max(64, checkpoint_radius);
         if (max_radius_cap > 0) {
             return std::min(requested, max_radius_cap);
         }
@@ -48,11 +46,7 @@ struct CollisionQueryContext {
             loaded = true;
             const Assets* assets = self.get_assets();
             if (assets) {
-                const int neighbor_radius = (self.info && self.info->NeighborSearchRadius > 0)
-                    ? self.info->NeighborSearchRadius
-                    : 0;
                 const int radius = resolve_search_radius(
-                    neighbor_radius,
                     furthest_checkpoint_distance_px,
                     assets->max_impassable_query_radius());
                 assets->query_impassable_entries(self, radius, entries);

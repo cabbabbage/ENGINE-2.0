@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "docked_panel_layout_policy.hpp"
+
 class Input;
 class DMButton;
 struct DMButtonStyle;
@@ -23,6 +25,7 @@ public:
     using RenderFunction = std::function<void(SDL_Renderer*)>;
     using UpdateFunction = std::function<void(const Input&, int, int)>;
     using EventFunction = std::function<bool(const SDL_Event&)>;
+    using CancelFunction = std::function<void()>;
     using HeaderTextProvider = std::function<std::string()>;
 
     SlidingWindowContainer();
@@ -31,6 +34,7 @@ public:
     void set_render_function(RenderFunction fn);
     void set_update_function(UpdateFunction fn);
     void set_event_function(EventFunction fn);
+    void set_cancel_function(CancelFunction fn);
     void set_header_text(const std::string& text);
     void set_header_text_provider(HeaderTextProvider provider);
     void set_on_close(std::function<void()> cb);
@@ -50,6 +54,7 @@ public:
 
     void set_panel_bounds_override(const SDL_Rect& bounds);
     void clear_panel_bounds_override();
+    void set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy policy);
 
     void open();
     void close();
@@ -69,6 +74,7 @@ public:
 
     const SDL_Rect& panel_rect() const { return panel_; }
     const SDL_Rect& scroll_region() const { return scroll_region_; }
+    const SDL_Rect& content_clip_rect() const { return content_clip_rect_; }
 
     bool is_point_inside(int x, int y) const;
 
@@ -76,6 +82,7 @@ private:
     void layout(int screen_w, int screen_h) const;
     void update_scroll_from_delta(int delta);
     SDL_Rect effective_panel_interaction_rect() const;
+    void cancel_panel_interactions() const;
     void update_editor_interaction_block_state();
 
 private:
@@ -83,6 +90,7 @@ private:
     RenderFunction render_function_{};
     UpdateFunction update_function_{};
     EventFunction event_function_{};
+    CancelFunction cancel_function_{};
     HeaderTextProvider header_text_provider_{};
     std::string header_text_{};
 
@@ -98,6 +106,8 @@ private:
 
     bool panel_override_active_ = false;
     SDL_Rect panel_override_{0, 0, 0, 0};
+    devmode::docked_panels::DockedPanelLayoutPolicy docked_layout_policy_ =
+        devmode::docked_panels::DockedPanelLayoutPolicy::SpecialHeightException;
 
     bool scrollbar_visible_ = false;
     bool content_clip_enabled_ = true;
@@ -117,6 +127,7 @@ private:
     mutable int visible_height_px_ = 0;
     mutable bool scroll_dragging_ = false;
     mutable bool scrollbar_dragging_ = false;
+    mutable bool pointer_inside_last_frame_ = false;
     mutable int scroll_drag_anchor_y_ = 0;
     mutable int scroll_drag_start_scroll_ = 0;
     mutable int scrollbar_drag_offset_ = 0;

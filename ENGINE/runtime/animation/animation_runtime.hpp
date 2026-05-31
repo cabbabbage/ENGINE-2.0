@@ -70,7 +70,14 @@ public:
     void mark_progress_toward_checkpoints();
     void mark_progress_toward_checkpoints_3d();
     bool advance(AnimationFrame*& frame);
-    void switch_to(const std::string& anim_id, std::size_t path_index = 0);
+    enum class TransitionLockPolicy {
+        RespectCurrentLock,
+        Force,
+    };
+
+    bool switch_to(const std::string& anim_id,
+                   std::size_t path_index = 0,
+                   TransitionLockPolicy lock_policy = TransitionLockPolicy::RespectCurrentLock);
     bool should_defer_for_non_locked(bool override_non_locked) const;
     void begin_reverse_current_animation_until_stop();
     void begin_reverse_current_animation_to_default();
@@ -145,6 +152,7 @@ private:
     bool       consume_replan_attempt_budget();
     animation_update::detail::PathBlockingContext active_path_blocking_context() const;
     bool       committed_attack_execution_active() const;
+    bool       can_interrupt_current_animation(TransitionLockPolicy lock_policy, const std::string& target_anim_id) const;
     bool       attack_recovery_sequence_active() const;
     float      parent_world_z() const;
 

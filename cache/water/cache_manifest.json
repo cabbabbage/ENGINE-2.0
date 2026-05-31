@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "e79bea034265f282",
+          "height": 65,
+          "order": 0,
+          "width": 418
+        }
+      ]
+    }
+  ],
+  "asset_name": "water",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 65,
+    "shared_width": 418
+  },
+  "digest": "96fa78f5e723761a",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

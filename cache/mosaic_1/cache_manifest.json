@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "fd27a19e9698fdcf",
+          "height": 1080,
+          "order": 0,
+          "width": 1077
+        }
+      ]
+    }
+  ],
+  "asset_name": "mosaic_1",
+  "authored_scale_percentage": 123.0,
+  "crop_canvas": {
+    "shared_height": 1075,
+    "shared_width": 1075
+  },
+  "digest": "ca8583231136e5eb",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

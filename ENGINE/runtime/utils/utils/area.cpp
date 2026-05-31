@@ -34,26 +34,14 @@ Area::Area(const std::string& name, const std::vector<Point>& pts, int resolutio
         }
 }
 
-Area::Area(const std::string& name, SDL_Point center, int w, int h,
-           const std::string& geometry,
-           int edge_smoothness,
-           int map_width, int map_height,
-           int resolution)
+Area::Area(const std::string& name, SDL_Point center, int size, int map_width, int map_height, int resolution)
 : area_name_(name)
 {
-        if (w <= 0 || h <= 0 || map_width <= 0 || map_height <= 0) {
+        if (size <= 0 || map_width <= 0 || map_height <= 0) {
                 throw std::runtime_error("[Area: " + area_name_ + "] Invalid dimensions");
         }
         resolution_ = vibble::grid::clamp_resolution(resolution);
-        if (geometry == "Circle") {
-                generate_circle(center, w / 2, h / 2, edge_smoothness, map_width, map_height);
-        } else if (geometry == "Square") {
-                generate_square(center, w, h, edge_smoothness, map_width, map_height);
-        } else if (geometry == "Point") {
-                generate_point(center, map_width, map_height);
-        } else {
-                throw std::runtime_error("[Area: " + area_name_ + "] Unknown geometry: " + geometry);
-        }
+        generate_diamond(center, size, map_width, map_height);
         update_geometry_data();
         if (!points.empty()) {
                 auto [minx, miny, maxx, maxy] = get_bounds();
@@ -144,35 +132,16 @@ void Area::generate_point(SDL_Point center, int map_width, int map_height) {
         apply_resolution_to_points();
 }
 
-void Area::generate_circle(SDL_Point center, int horizontal_radius, int vertical_radius, int edge_smoothness, int map_width, int map_height) {
-        (void)edge_smoothness;
-        constexpr int count = 64;
-        const int clamped_horizontal_radius = std::max(1, horizontal_radius);
-        const int clamped_vertical_radius = std::max(1, vertical_radius);
-	points.clear();
-	points.reserve(count);
-	for (int i = 0; i < count; ++i) {
-		double theta = 2 * SDL_PI_D * i / count;
-		double x = center.x + static_cast<double>(clamped_horizontal_radius) * std::cos(theta);
-		double y = center.y + static_cast<double>(clamped_vertical_radius) * std::sin(theta);
-                int xi = static_cast<int>(std::round(std::clamp(x, 0.0, static_cast<double>(map_width))));
-                int yi = static_cast<int>(std::round(std::clamp(y, 0.0, static_cast<double>(map_height))));
-                points.emplace_back(SDL_Point{ xi, yi });
-        }
-        bounds_valid_ = false;
-        apply_resolution_to_points();
-}
-
-void Area::generate_square(SDL_Point center, int w, int h, int edge_smoothness, int map_width, int map_height) {
-        (void)edge_smoothness;
-	int half_w = w / 2, half_h = h / 2;
+void Area::generate_diamond(SDL_Point center, int size, int map_width, int map_height) {
+        const int step = vibble::grid::delta(resolution_);
+        const int radius = std::max(1, size) * std::max(1, step);
 	points.clear();
 	points.reserve(4);
         for (auto [x0, y0] : std::array<Point, 4>{
-      Point{center.x - half_w, center.y - half_h},
-      Point{center.x + half_w, center.y - half_h},
-      Point{center.x + half_w, center.y + half_h},
-      Point{center.x - half_w, center.y + half_h}}) {
+      Point{center.x, center.y - radius},
+      Point{center.x + radius, center.y},
+      Point{center.x, center.y + radius},
+      Point{center.x - radius, center.y}}) {
                 int x = x0;
                 int y = y0;
                 points.emplace_back(SDL_Point{ std::clamp(x, 0, map_width), std::clamp(y, 0, map_height) });

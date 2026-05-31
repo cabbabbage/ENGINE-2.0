@@ -1347,6 +1347,27 @@ nlohmann::json encode_anchor_frame_json(const std::vector<DisplacedAssetAnchorPo
     return frame_json;
 }
 
+void normalize_anchor_frame_depth_offsets(nlohmann::json& frame_anchors_json) {
+    if (!frame_anchors_json.is_array()) {
+        return;
+    }
+
+    for (auto& anchor_json : frame_anchors_json) {
+        if (!anchor_json.is_object()) {
+            continue;
+        }
+        auto depth_it = anchor_json.find("depth_offset");
+        if (depth_it == anchor_json.end()) {
+            continue;
+        }
+        if (const auto parsed = parse_number_like_json(*depth_it)) {
+            anchor_json["depth_offset"] = quantize_depth_offset_world_units(static_cast<float>(*parsed));
+        } else {
+            anchor_json["depth_offset"] = 0.0f;
+        }
+    }
+}
+
 void normalize_anchor_points_payload(nlohmann::json& animation_payload, std::size_t frame_count) {
     if (!animation_payload.is_object()) {
         animation_payload = nlohmann::json::object();
@@ -1359,11 +1380,12 @@ void normalize_anchor_points_payload(nlohmann::json& animation_payload, std::siz
 
     nlohmann::json normalized = nlohmann::json::array();
     for (std::size_t frame_index = 0; frame_index < frame_count; ++frame_index) {
+        nlohmann::json frame_anchors = nlohmann::json::array();
         if (frame_index < anchor_points.size() && anchor_points[frame_index].is_array()) {
-            normalized.push_back(anchor_points[frame_index]);
-        } else {
-            normalized.push_back(nlohmann::json::array());
+            frame_anchors = anchor_points[frame_index];
+            normalize_anchor_frame_depth_offsets(frame_anchors);
         }
+        normalized.push_back(std::move(frame_anchors));
     }
     animation_payload["anchor_points"] = std::move(normalized);
 }
@@ -2176,8 +2198,7 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
         info_json_["tillable"] = tillable;
-        NeighborSearchRadius = std::clamp( data.value("neighbor_search_distance", NeighborSearchRadius), 20, 1000);
-        info_json_["neighbor_search_distance"] = NeighborSearchRadius;
+        info_json_.erase("neighbor_search_distance");
         if (info_json_.is_object()) {
                 info_json_.erase("apply_parallax");
         }
@@ -2501,6 +2522,7 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.is_object()) {
                 payload = nlohmann::json::object();
         }
+        payload.erase("neighbor_search_distance");
         payload[kMovementEnabledKey] = movement_enabled;
         payload[kAttackBoxEnabledKey] = attack_box_enabled;
         payload[kHitboxEnabledKey] = hitbox_enabled;
@@ -2646,11 +2668,6 @@ void AssetInfo::set_min_same_type_distance(int d) {
 void AssetInfo::set_min_distance_all(int d) {
         min_distance_all = d;
         info_json_["min_distance_all"] = d;
-}
-
-void AssetInfo::set_neighbor_search_radius(int radius) {
-        NeighborSearchRadius = std::clamp(radius, 20, 1000);
-        info_json_["neighbor_search_distance"] = NeighborSearchRadius;
 }
 
 void AssetInfo::set_flipable(bool v) {
@@ -2830,9 +2847,14 @@ void AssetInfo::set_passable(bool v) {
 
 void AssetInfo::set_tillable(bool v) {
         tillable = v;
-
         info_json_["tillable"] = v;
-        info_json_["tileable"] = v;
+
+}
+
+
+void AssetInfo::set_crop_on_load(bool v) {
+        crop_on_load = v;
+        info_json_["crop_on_load"] = v;
 }
 
 Area* AssetInfo::find_area(const std::string& name) {

@@ -26,10 +26,13 @@
 #include "utils/area.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "gameplay/map_generation/generate_rooms.hpp"
+#include "gameplay/map_generation/coarseness_system.hpp"
 #include "gameplay/map_generation/map_graph.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "gameplay/spawn/runtime_candidates.hpp"
+#include "gameplay/spawn/asset_spawner.hpp"
 #include "utils/grid.hpp"
 #include "core/tile_builder.hpp"
 #include <nlohmann/json.hpp>
@@ -38,6 +41,25 @@
 using json = nlohmann::json;
 
 namespace {
+
+std::uint64_t mix_u64(std::uint64_t seed, std::uint64_t value) {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+        return seed;
+}
+
+std::uint64_t build_map_coarseness_seed(const std::string& map_id, const nlohmann::json& manifest) {
+        std::uint64_t seed = std::hash<std::string>{}(map_id);
+        if (manifest.is_object()) {
+                auto map_info_it = manifest.find("map_info");
+                if (map_info_it != manifest.end() && map_info_it->is_object()) {
+                        auto regen_it = map_info_it->find("regen_seed");
+                        if (regen_it != map_info_it->end() && regen_it->is_number_integer()) {
+                                seed = mix_u64(seed, static_cast<std::uint64_t>(regen_it->get<std::int64_t>()));
+                        }
+                }
+        }
+        return seed;
+}
 
 bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
         if (!info) {
@@ -48,21 +70,15 @@ bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
         return it != info->animations.end() && it->second.has_frames();
 }
 
-std::unordered_set<std::string> collect_runtime_asset_names_from_rooms(const std::vector<Room*>& rooms) {
+std::unordered_set<std::string> collect_all_known_asset_names(const AssetLibrary* asset_library) {
         std::unordered_set<std::string> names;
+        if (!asset_library) {
+                return names;
+        }
 
-        for (const Room* room : rooms) {
-                if (!room) {
-                        continue;
-                }
-
-                for (const auto& asset_up : room->assets) {
-                        const Asset* asset = asset_up.get();
-                        if (!asset || !asset->info || asset->info->name.empty()) {
-                                continue;
-                        }
-
-                        names.insert(asset->info->name);
+        for (const auto& [name, info] : asset_library->all()) {
+                if (!name.empty() && info) {
+                        names.insert(name);
                 }
         }
 
@@ -92,7 +108,7 @@ bool ensure_default_animation_frames_loaded_for_asset(SDL_Renderer* renderer,
                         one_asset.insert(info->name);
                         asset_library->loadAnimationsFor(renderer, one_asset);
                 } else {
-                        info->loadAnimations(renderer, false, true);
+                        info->loadAnimations(renderer, true, true);
                 }
         } catch (const std::exception& ex) {
                 vibble::log::error("[AssetLoader] Lazy animation load failed for '" + info->name +
@@ -186,28 +202,28 @@ manifest_store_(manifest_store)
                 const auto preload_begin = std::chrono::steady_clock::now();
 
                 if (asset_library_ && renderer_) {
-                        const std::unordered_set<std::string> map_asset_names =
-                            collect_runtime_asset_names_from_rooms(getRooms());
+                        const std::unordered_set<std::string> all_asset_names =
+                            collect_all_known_asset_names(asset_library_);
 
-                        if (!map_asset_names.empty()) {
-                                vibble::log::info(std::string("[AssetLoader] Loading runtime animations for map-used assets (") +
-                                                  std::to_string(map_asset_names.size()) + ")...");
-                                asset_library_->loadAnimationsFor(renderer_, map_asset_names);
+                        if (!all_asset_names.empty()) {
+                                vibble::log::info(std::string("[AssetLoader] Loading runtime animations for all known assets (") +
+                                                  std::to_string(all_asset_names.size()) + ")...");
+                                asset_library_->loadAnimationsFor(renderer_, all_asset_names);
 
                                 const auto preload_end = std::chrono::steady_clock::now();
                                 const double preload_ms =
                                     std::chrono::duration_cast<std::chrono::milliseconds>(preload_end - preload_begin).count();
 
-                                vibble::log::info(std::string("[AssetLoader] Map-scoped runtime animation load completed for ") +
-                                                  std::to_string(map_asset_names.size()) + " asset type(s) in " +
+                                vibble::log::info(std::string("[AssetLoader] Runtime animation load completed for all known asset type(s): requested=") +
+                                                  std::to_string(all_asset_names.size()) + " in " +
                                                   std::to_string(preload_ms) + "ms");
                         } else {
-                                vibble::log::info("[AssetLoader] No map-spawned asset names found for runtime animation load.");
+                                vibble::log::warn("[AssetLoader] Asset library has no known assets to preload.");
                         }
                 } else if (!renderer_) {
-                        vibble::log::warn("[AssetLoader] Renderer unavailable; skipping map-scoped runtime animation load.");
+                        vibble::log::warn("[AssetLoader] Renderer unavailable; skipping full runtime animation load.");
                 } else {
-                        vibble::log::warn("[AssetLoader] Asset library unavailable; skipping map-scoped runtime animation load.");
+                        vibble::log::warn("[AssetLoader] Asset library unavailable; skipping full runtime animation load.");
                 }
         }
 
@@ -319,6 +335,64 @@ void AssetLoader::loadRooms() {
         MapGridSettings grid_settings = map_grid_settings_;
         auto room_ptrs = generator.build( asset_library_, map_radius_, layer_radii_, rooms_data_        ? *rooms_data_        : empty_rooms, trails_data_       ? *trails_data_       : empty_trails, grid_settings);
         world_context_->adopt_rooms(std::move(room_ptrs));
+        {
+                auto rooms = getRooms();
+
+                std::unordered_map<Room*, Area> original_room_areas;
+                original_room_areas.reserve(rooms.size());
+                std::vector<Area> normal_spawned_occupancy;
+                auto add_asset_claim = [&normal_spawned_occupancy](Asset* asset) {
+                        if (!asset) return;
+                        std::optional<Area> footprint = AssetSpawner::asset_footprint_area(*asset, "normal_asset_footprint");
+                        if (footprint) {
+                                normal_spawned_occupancy.push_back(*footprint);
+                        }
+                };
+                for (Room* room : rooms) {
+                        if (!room || !room->room_area) continue;
+                        original_room_areas.emplace(room, *room->room_area);
+                        for (auto& asset_up : room->assets) {
+                                add_asset_claim(asset_up.get());
+                        }
+                }
+
+                const std::uint64_t coarseness_seed = build_map_coarseness_seed(map_id_, map_manifest_json_);
+                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms, coarseness_seed);
+
+                const nlohmann::json* edge_detail_candidates = nullptr;
+                auto edge_detail_it = map_manifest_json_.find("edge_detail_candidates");
+                if (edge_detail_it != map_manifest_json_.end() && edge_detail_it->is_object()) {
+                        edge_detail_candidates = &(*edge_detail_it);
+                }
+
+                std::vector<Area> edge_detail_claimed;
+                for (Room* room : rooms) {
+                        if (!room || !room->coarseness_added_area || !edge_detail_candidates) continue;
+                        if (room->coarseness_added_area->get_points().empty() || room->coarseness_added_area->get_area() <= 0.0) {
+                                continue;
+                        }
+                        auto original_it = original_room_areas.find(room);
+                        const Area& original_area = original_it != original_room_areas.end()
+                            ? original_it->second
+                            : *room->room_area;
+                        std::vector<Area> other_original_areas;
+                        other_original_areas.reserve(original_room_areas.size());
+                        for (const auto& [other_room, other_area] : original_room_areas) {
+                                if (other_room && other_room != room) {
+                                        other_original_areas.push_back(other_area);
+                                }
+                        }
+
+                        AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
+                        edge_spawner.set_map_grid_settings(room->map_grid_settings());
+                        edge_spawner.spawn_edge_detail_candidates(*room,
+                                                                  *room->room_area,
+                                                                  original_area,
+                                                                  other_original_areas,
+                                                                  *edge_detail_candidates,
+                                                                  edge_detail_claimed);
+                }
+        }
         if (getRooms().empty()) {
                 throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
         }

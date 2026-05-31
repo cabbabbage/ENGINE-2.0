@@ -138,6 +138,30 @@ target_link_libraries(movement_paths_frame_edit_state_test PRIVATE
     nlohmann_json::nlohmann_json
 )
 
+add_executable(enemy_behavior_phase_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_behavior_phase_regression_test.cpp
+)
+target_include_directories(enemy_behavior_phase_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
+add_executable(enemy_combat_cooldown_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_combat_cooldown_regression_test.cpp
+)
+target_include_directories(enemy_combat_cooldown_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
+add_executable(enemy_attack_cycle_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_attack_cycle_regression_test.cpp
+)
+target_include_directories(enemy_attack_cycle_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)
@@ -182,6 +206,23 @@ endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
+find_package(Clipper2 CONFIG QUIET)
+target_link_libraries(enemy_behavior_phase_regression_test PRIVATE
+    SDL3::SDL3
+)
+target_link_libraries(enemy_combat_cooldown_regression_test PRIVATE
+    SDL3::SDL3
+)
+target_link_libraries(enemy_attack_cycle_regression_test PRIVATE
+    SDL3::SDL3
+)
+
+add_executable(throw_physics_runtime_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/throw_physics_runtime_test.cpp
+)
+target_include_directories(throw_physics_runtime_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+)
 target_link_libraries(sprite_floor_clip_test PRIVATE
     SDL3::SDL3
 )
@@ -290,6 +331,10 @@ target_link_libraries(engine
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (Clipper2_FOUND)
+    target_link_libraries(engine PRIVATE Clipper2::Clipper2)
+    target_compile_definitions(engine PRIVATE VIBBLE_HAS_CLIPPER2=1)
+endif()
 if (WINSDK_UM_X64_LIBDIR)
     target_link_directories(engine PRIVATE "${WINSDK_UM_X64_LIBDIR}")
 endif()

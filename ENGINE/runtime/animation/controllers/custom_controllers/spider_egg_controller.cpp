@@ -46,14 +46,14 @@ bool animation_has_tag(const Asset& asset, const char* tag) {
 } // namespace
 
 spider_egg_controller::spider_egg_controller(Asset* self)
-    : custom_controller_api::DefaultCustomController(self) {}
+    : custom_controller_api::CustomControllerBase(self) {}
 
 void spider_egg_controller::on_init() {
-    custom_controller_api::DefaultCustomController::on_init();
+    custom_controller_api::CustomControllerBase::on_init();
 }
 
 void spider_egg_controller::on_update(const Input& in) {
-    custom_controller_api::DefaultCustomController::on_update(in);
+    custom_controller_api::CustomControllerBase::on_update(in);
     (void)in;
 
     Asset* self = controller_self();
@@ -73,7 +73,7 @@ void spider_egg_controller::on_update(const Input& in) {
 }
 
 void spider_egg_controller::on_attack(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_attack(attack);
+    custom_controller_api::CustomControllerBase::on_attack(attack);
 
     Asset* self = controller_self();
     if (!self || !self->anim_ || is_cracking_) {
@@ -87,32 +87,32 @@ void spider_egg_controller::on_attack(const animation_update::Attack& attack) {
 }
 
 void spider_egg_controller::on_hit(const animation_update::Attack& attack) {
-    custom_controller_api::DefaultCustomController::on_hit(attack);
+    custom_controller_api::CustomControllerBase::on_hit(attack);
     (void)attack;
 }
 
 void spider_egg_controller::on_death() {
-    custom_controller_api::DefaultCustomController::on_death();
+    custom_controller_api::CustomControllerBase::on_death();
 }
 
 void spider_egg_controller::on_no_pending_attacks() {
-    custom_controller_api::DefaultCustomController::on_no_pending_attacks();
+    custom_controller_api::CustomControllerBase::on_no_pending_attacks();
 }
 
 void spider_egg_controller::on_after_attack() {}
 
 custom_controller_api::AttackProcessingConfig spider_egg_controller::attack_processing_config() const {
-    return custom_controller_api::DefaultCustomController::attack_processing_config();
+    return custom_controller_api::CustomControllerBase::attack_processing_config();
 }
 
 void spider_egg_controller::on_orphaned_hook(Asset& self,
                                              Asset* former_parent,
                                              std::optional<OrphanImpulse> impulse) {
-    custom_controller_api::DefaultCustomController::on_orphaned_hook(self, former_parent, impulse);
+    custom_controller_api::CustomControllerBase::on_orphaned_hook(self, former_parent, impulse);
     if (is_cracking_) {
         return;
     }
-    if (const auto* runtime_ctx = game_context().shared) {
+    if (const auto* runtime_ctx = controller_game_context().shared) {
         if (former_parent && former_parent == runtime_ctx->player() &&
             runtime_ctx->player_motion_disturbance().active) {
             (void)try_start_cracking(self);
@@ -125,15 +125,15 @@ void spider_egg_controller::on_orphaned_hook(Asset& self,
 }
 
 void spider_egg_controller::on_pre_delete_hook(Asset& self) {
-    custom_controller_api::DefaultCustomController::on_pre_delete_hook(self);
+    custom_controller_api::CustomControllerBase::on_pre_delete_hook(self);
 }
 
 void spider_egg_controller::on_process_pending_attacks(Asset& self_ref) {
-    custom_controller_api::DefaultCustomController::on_process_pending_attacks(self_ref);
+    custom_controller_api::CustomControllerBase::on_process_pending_attacks(self_ref);
 }
 
 void spider_egg_controller::on_interact_hook(Asset& self, Asset* instigator) {
-    custom_controller_api::DefaultCustomController::on_interact_hook(self, instigator);
+    custom_controller_api::CustomControllerBase::on_interact_hook(self, instigator);
 }
 
 void spider_egg_controller::spawn_small_spider_child(Asset& self) {
@@ -164,7 +164,7 @@ bool spider_egg_controller::try_start_cracking(Asset& self) {
 }
 
 void spider_egg_controller::process_player_motion_disturbance(Asset& self) {
-    const auto* runtime_ctx = game_context().shared;
+    const auto* runtime_ctx = controller_game_context().shared;
     if (!runtime_ctx || !runtime_ctx->player()) {
         return;
     }

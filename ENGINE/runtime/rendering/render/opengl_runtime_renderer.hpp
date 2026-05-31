@@ -73,6 +73,17 @@ const std::vector<Asset*>& select_visible_assets_for_gpu_frame(bool dev_mode,
 
 class OpenGLRuntimeRenderer {
 public:
+
+    struct DustAnchor {
+        float world_x = 0.0f;
+        float world_z = 0.0f;
+        float pixels_per_world_unit = 1.0f;
+    };
+    bool ensure_atmospheric_dust_textures();
+    void destroy_atmospheric_dust_textures();
+
+    std::vector<SDL_Texture*> atmospheric_dust_textures_{};
+    bool atmospheric_dust_textures_loaded_ = false;
     static std::unique_ptr<OpenGLRuntimeRenderer> Create(SDL_Renderer* renderer,
                                                          Assets* assets,
                                                          int screen_width,
@@ -98,7 +109,7 @@ public:
     const std::string& backend_name() const;
 
 private:
-    SDL_Texture* finale_effects_target_ = nullptr;
+    SDL_Texture* lens_post_target_ = nullptr;
     struct RenderTargetLifecycleManager {
         int requested_width = 1;
         int requested_height = 1;

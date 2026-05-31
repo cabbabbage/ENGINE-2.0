@@ -1,11 +1,6 @@
 #include "frog_controller.hpp"
-#include "animation/controllers/shared/custom_controller_api.hpp"
-#include "animation/animation_update.hpp"
 
-#include "animation/controllers/shared/controller_path_utils.hpp"
-#include "animation/controllers/shared/controller_visit_threshold.hpp"
 #include "assets/asset/Asset.hpp"
-#include "utils/range_util.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -20,50 +15,45 @@ constexpr int kRandomStepMaxPx = 72;
 constexpr int kIdleFramesMin = 20;
 constexpr int kIdleFramesMax = 100;
 
-int distance_sq_xz(const Asset& a, const Asset& b) {
-    const int dx = b.world_x() - a.world_x();
-    const int dz = b.world_z() - a.world_z();
-    return dx * dx + dz * dz;
-}
-
 } // namespace
 
 frog_controller::frog_controller(Asset* self)
-    : CustomAssetController(self),
+    : custom_controller_api::CustomControllerBase(self),
       rng_(std::random_device{}()),
       idle_frames_remaining_(sample_idle_frames()) {
-    Asset* owner = self_ptr();
+    Asset* owner = controller_self();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
         owner->needs_target = true;
     }
 }
 
-void frog_controller::on_update(const Input&) {
-    const auto& ctx = game_context();
-    Asset* self = self_ptr();
-    if (!self || !self->anim_ || !ctx.has_assets()) {
+void frog_controller::on_update(const Input& in) {
+    custom_controller_api::CustomControllerBase::on_update(in);
+    Asset* self = controller_self();
+    if (!self || !self->anim_) {
         return;
     }
 
-    Asset* player = custom_controller_api::resolve_valid_player_target(ctx);
+    Asset* player = resolve_target_player();
     if (!player) {
         return;
     }
 
-    const int dist_sq = distance_sq_xz(*self, *player);
+    const long long dx = static_cast<long long>(player->world_x()) - static_cast<long long>(self->world_x());
+    const long long dy = static_cast<long long>(player->world_y()) - static_cast<long long>(self->world_y());
+    const long long dz = static_cast<long long>(player->world_z()) - static_cast<long long>(self->world_z());
+    const long long dist_sq = (dx * dx) + (dy * dy) + (dz * dz);
     const int threat_sq = kThreatRangePx * kThreatRangePx;
     const int safe_sq = kSafeDistancePx * kSafeDistancePx;
 
-    if (dist_sq <= threat_sq) {
+    if (dist_sq <= static_cast<long long>(threat_sq)) {
         hop_away_from(*player);
-        custom_controller_api::dispatch_contact_attack(ctx);
         return;
     }
 
-    if (dist_sq < safe_sq && flee_until_safe_) {
+    if (dist_sq < static_cast<long long>(safe_sq) && flee_until_safe_) {
         hop_away_from(*player);
-        custom_controller_api::dispatch_contact_attack(ctx);
         return;
     }
 
@@ -71,18 +61,15 @@ void frog_controller::on_update(const Input&) {
 
     if (idle_frames_remaining_ > 0) {
         --idle_frames_remaining_;
-        custom_controller_api::dispatch_contact_attack(ctx);
         return;
     }
 
     random_wander_away_bias(*player);
     idle_frames_remaining_ = sample_idle_frames();
-
-    custom_controller_api::dispatch_contact_attack(ctx);
 }
 
 void frog_controller::on_process_pending_attacks(Asset& self) {
-    CustomAssetController::on_process_pending_attacks(self);
+    custom_controller_api::CustomControllerBase::on_process_pending_attacks(self);
 }
 
 int frog_controller::sample_idle_frames() {
@@ -91,37 +78,24 @@ int frog_controller::sample_idle_frames() {
 }
 
 void frog_controller::hop_away_from(const Asset& player) {
-    Asset* self = self_ptr();
-    if (!self || !self->anim_) {
+    Asset* self = controller_self();
+    if (!self) {
         return;
     }
 
     flee_until_safe_ = true;
+    custom_controller_api::MovementConfig move_cfg{};
+    move_cfg.visit_threshold_px = 12;
+    move_cfg.override_non_locked = false;
 
-    const auto path = controller_paths::flee_path(self, &player);
-    if (!path.empty()) {
-        const int visit_threshold = controller_utils::controller_visit_threshold(self, path);
-        self->anim_->auto_move(path, visit_threshold);
-        return;
-    }
-
-    const int dx = self->world_x() - player.world_x();
-    const int dz = self->world_z() - player.world_z();
-    const double len = std::sqrt(std::max(1.0, static_cast<double>(dx * dx + dz * dz)));
-    const int step = kRandomStepMaxPx;
-    SDL_Point delta{
-        static_cast<int>(std::lround((static_cast<double>(dx) / len) * step)),
-        static_cast<int>(std::lround((static_cast<double>(dz) / len) * step))
-    };
-    if (delta.x == 0 && delta.y == 0) {
-        delta.x = (dx < 0) ? -1 : 1;
-    }
-    self->anim_->move(delta, delta.x < 0 ? "left" : "right");
+    (void)move_away(axis::WorldPos{player.world_x(), player.world_y(), player.world_z()},
+                    kRandomStepMaxPx,
+                    move_cfg);
 }
 
 void frog_controller::random_wander_away_bias(const Asset& player) {
-    Asset* self = self_ptr();
-    if (!self || !self->anim_) {
+    Asset* self = controller_self();
+    if (!self) {
         return;
     }
 
@@ -151,13 +125,13 @@ void frog_controller::random_wander_away_bias(const Asset& player) {
     vz /= noisy_len;
 
     const int step = step_dist(rng_);
-    SDL_Point delta{
-        static_cast<int>(std::lround(vx * step)),
-        static_cast<int>(std::lround(vz * step))
-    };
-    if (delta.x == 0 && delta.y == 0) {
-        delta.x = 1;
-    }
+    const axis::WorldPos target{
+        self->world_x() + static_cast<int>(std::lround(vx * step)),
+        self->world_y(),
+        self->world_z() + static_cast<int>(std::lround(vz * step))};
 
-    self->anim_->move(delta, delta.x < 0 ? "left" : "right");
+    custom_controller_api::MovementConfig move_cfg{};
+    move_cfg.visit_threshold_px = 8;
+    move_cfg.override_non_locked = false;
+    (void)move_toward(target, step, move_cfg);
 }

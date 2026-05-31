@@ -45,6 +45,9 @@ struct GpuDepthLayerDrawPackets {
     int depth_layer = 0;
     float blur_strength_px = 0.0f;
     std::vector<GpuSpriteDrawPacket> packets{};
+    float dust_world_z = 0.0f;
+    bool has_dust_world_z = false;
+    float world_distance_from_focus = 0.0f;
 };
 
 struct GpuSceneFrameData {

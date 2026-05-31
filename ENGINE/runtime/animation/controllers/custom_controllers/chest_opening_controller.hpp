@@ -1,13 +1,13 @@
 #ifndef CHEST_OPENING_CONTROLLER_HPP
 #define CHEST_OPENING_CONTROLLER_HPP
 
-#include "animation/controllers/shared/custom_controller_api.hpp"
+#include "animation/controllers/custom_controller.hpp"
 #include <optional>
 
 class Asset;
 class Input;
 
-class chest_opening_controller : public custom_controller_api::DefaultCustomController {
+class chest_opening_controller : public custom_controller_api::CustomControllerBase {
 
 public:
     explicit chest_opening_controller(Asset* self);

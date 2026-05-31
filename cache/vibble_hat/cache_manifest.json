@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "36dba2582db57455",
+          "height": 63,
+          "order": 0,
+          "width": 85
+        }
+      ]
+    }
+  ],
+  "asset_name": "vibble_hat",
+  "authored_scale_percentage": 66.99999237060547,
+  "crop_canvas": {
+    "shared_height": 63,
+    "shared_width": 85
+  },
+  "digest": "9911159f28b5755f",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

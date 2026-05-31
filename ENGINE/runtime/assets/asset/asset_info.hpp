@@ -101,6 +101,7 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    bool crop_on_load = true;
     std::string lighting_normal_map;
     float lighting_roughness = 1.0f;
     float lighting_height_bias = 0.0f;
@@ -251,8 +252,8 @@ class AssetInfo {
     void set_asset_type(const std::string &t);
     void set_min_same_type_distance(int d);
     void set_min_distance_all(int d);
-    void set_neighbor_search_radius(int radius);
     void set_flipable(bool v);
+    void set_crop_on_load(bool v);
     void set_starting_health(int health);
     void set_scale_factor(float factor);
     void set_scale_percentage(float percent);
@@ -277,7 +278,6 @@ class AssetInfo {
     Area* find_area(const std::string& name);
     void upsert_area_from_editor(const class Area& area, std::optional<NamedArea::RenderFrame> frame = std::nullopt);
     std::string pick_next_animation(const std::string& mapping_id) const;
-    int NeighborSearchRadius = 500;
 
     void set_spawn_groups_payload(const nlohmann::json& groups);
     nlohmann::json spawn_groups_payload() const;

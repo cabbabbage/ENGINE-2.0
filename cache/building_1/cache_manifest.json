@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "04163c02770ef89c",
+          "height": 88,
+          "order": 0,
+          "width": 174
+        }
+      ]
+    }
+  ],
+  "asset_name": "building_1",
+  "authored_scale_percentage": 333.0,
+  "crop_canvas": {
+    "shared_height": 88,
+    "shared_width": 174
+  },
+  "digest": "66e9a206ea7920b8",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

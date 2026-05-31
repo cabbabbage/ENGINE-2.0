@@ -7,23 +7,31 @@
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
+#include <iostream>
+#include <map>
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
+#include "gameplay/spawn/spawn_group_codec.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/utils/weighted_range.hpp"
+#include "utils/grid.hpp"
 
 namespace manifest {
 namespace {
 
-constexpr int kDefaultSpawnRadius = 1500;
-constexpr int kMinRoomDimension = 1;
-constexpr int kMaxRoomDimension = 40000;
-constexpr int kDefaultRoomMinDimension = 500;
-constexpr int kDefaultRoomMaxDimension = 40000;
+constexpr int kDefaultRoomSize = 9;
+constexpr int kMinRoomSize = 7;
+constexpr int kMaxRoomSize = 20;
+constexpr int kDefaultTrailSize = 5;
+constexpr int kMinTrailSize = 5;
+constexpr int kMaxTrailSize = 10;
 constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;
 constexpr int kMaxTrailSectorWidthPercent = 100;
+constexpr int kMinCoarseness = 0;
+constexpr int kMaxCoarseness = 4000;
+constexpr int kMinCoarsenessRadius = 8;
 constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
@@ -38,14 +46,6 @@ bool json_to_int(const nlohmann::json& value, int& out) {
     return false;
 }
 
-bool json_to_string(const nlohmann::json& value, std::string& out) {
-    if (!value.is_string()) {
-        return false;
-    }
-    out = value.get<std::string>();
-    return true;
-}
-
 bool json_to_double(const nlohmann::json& value, double& out) {
     if (value.is_number_float()) {
         out = value.get<double>();
@@ -58,54 +58,23 @@ bool json_to_double(const nlohmann::json& value, double& out) {
     return false;
 }
 
-vibble::weighted_range::WeightedIntRange read_weighted_range_field(const nlohmann::json& entry,
-                                                                   const char* key,
-                                                                   const vibble::weighted_range::WeightedIntRange& fallback) {
-    if (!entry.is_object() || !entry.contains(key)) {
-        return fallback;
+
+vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
+    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
+    if (clamped <= 0) {
+        return vibble::weighted_range::make_flat(0);
     }
-    return vibble::weighted_range::from_json(entry.at(key), fallback);
+    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
+    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
+    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
 }
 
-vibble::weighted_range::WeightedIntRange read_weighted_range_legacy_pair(const nlohmann::json& entry,
-                                                                         const char* min_key,
-                                                                         const char* max_key,
-                                                                         const vibble::weighted_range::WeightedIntRange& fallback) {
-    if (!entry.is_object()) {
-        return fallback;
+vibble::weighted_range::WeightedIntRange normalize_coarseness_range_value(const nlohmann::json& value) {
+    int legacy = 0;
+    if (json_to_int(value, legacy)) {
+        return coarseness_range_from_legacy(legacy);
     }
-    bool has_min = false;
-    bool has_max = false;
-    std::int64_t min_value = fallback.center;
-    std::int64_t max_value = fallback.center;
-    if (entry.contains(min_key)) {
-        if (entry[min_key].is_number_integer()) {
-            min_value = entry[min_key].get<std::int64_t>();
-            has_min = true;
-        } else if (entry[min_key].is_number_float()) {
-            min_value = static_cast<std::int64_t>(std::llround(entry[min_key].get<double>()));
-            has_min = true;
-        }
-    }
-    if (entry.contains(max_key)) {
-        if (entry[max_key].is_number_integer()) {
-            max_value = entry[max_key].get<std::int64_t>();
-            has_max = true;
-        } else if (entry[max_key].is_number_float()) {
-            max_value = static_cast<std::int64_t>(std::llround(entry[max_key].get<double>()));
-            has_max = true;
-        }
-    }
-    if (!has_min && !has_max) {
-        return fallback;
-    }
-    if (!has_min) {
-        min_value = max_value;
-    }
-    if (!has_max) {
-        max_value = min_value;
-    }
-    return vibble::weighted_range::make_legacy_uniform(min_value, max_value);
+    return vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
 }
 
 double normalize_direction_degrees(double value) {
@@ -180,30 +149,18 @@ bool normalize_trail_connection_sector(nlohmann::json& entry, bool include_for_r
     return changed;
 }
 
-void sanitize_dimension_pair(int& min_value, int& max_value) {
-    if (min_value <= 0 && max_value > 0) {
-        min_value = max_value;
-    } else if (max_value <= 0 && min_value > 0) {
-        max_value = min_value;
-    } else if (min_value <= 0 && max_value <= 0) {
-        min_value = kDefaultRoomMinDimension;
-        max_value = kDefaultRoomMaxDimension;
+int normalize_room_size(const nlohmann::json& entry, bool is_trail_entry) {
+    const int default_size = is_trail_entry ? kDefaultTrailSize : kDefaultRoomSize;
+    const int min_size = is_trail_entry ? kMinTrailSize : kMinRoomSize;
+    const int max_size = is_trail_entry ? kMaxTrailSize : kMaxRoomSize;
+    int size = default_size;
+    if (entry.is_object() && entry.contains("size")) {
+        (void)json_to_int(entry["size"], size);
     }
-
-    min_value = std::clamp(min_value, kMinRoomDimension, kMaxRoomDimension);
-    max_value = std::clamp(max_value, kMinRoomDimension, kMaxRoomDimension);
-    if (max_value < min_value) {
-        std::swap(min_value, max_value);
+    if (is_trail_entry && (size < min_size || size > max_size)) {
+        return default_size;
     }
-}
-
-bool geometry_is_circle(const std::string& geometry) {
-    std::string lowered;
-    lowered.reserve(geometry.size());
-    for (char ch : geometry) {
-        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
-    }
-    return lowered == "circle";
+    return std::clamp(size, min_size, max_size);
 }
 
 bool normalize_room_config_entry(nlohmann::json& entry,
@@ -221,55 +178,25 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         changed = true;
     }
 
-    std::string geometry = "Square";
-    const bool has_geometry_string = entry.contains("geometry") && json_to_string(entry["geometry"], geometry);
-    if (!has_geometry_string || geometry.empty()) {
-        geometry = "Square";
-        entry["geometry"] = geometry;
+    auto warn_legacy_drop = [&](const char* field) {
+        std::cerr << "[MapManifestNormalizer] Dropping legacy geometry field '" << field
+                  << "' in " << (is_trail_entry ? "trail" : "room")
+                  << " entry '" << key_name << "'.\n";
+    };
+
+    const int normalized_size = normalize_room_size(entry, is_trail_entry);
+    if (!entry.contains("size") || !entry["size"].is_number_integer() || entry["size"].get<int>() != normalized_size) {
+        entry["size"] = normalized_size;
         changed = true;
     }
-
-    const auto default_range = vibble::weighted_range::make_legacy_uniform(kDefaultRoomMinDimension, kDefaultRoomMaxDimension);
-    vibble::weighted_range::WeightedIntRange width_range = read_weighted_range_field(entry, "width", default_range);
-    if (!entry.contains("width")) {
-        if (entry.contains("min_width") || entry.contains("max_width")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_width", "max_width", default_range);
-        } else if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
-        }
-    }
-
-    vibble::weighted_range::WeightedIntRange height_range = width_range;
-    if (!is_trail_entry) {
-        height_range = read_weighted_range_field(entry, "height", width_range);
-        if (!entry.contains("height") && (entry.contains("min_height") || entry.contains("max_height"))) {
-            height_range = read_weighted_range_legacy_pair(entry, "min_height", "max_height", width_range);
-        }
-    }
-
-    if (!is_trail_entry && geometry_is_circle(geometry)) {
-        if (entry.contains("min_radius") || entry.contains("max_radius") || entry.contains("radius")) {
-            width_range = read_weighted_range_legacy_pair(entry, "min_radius", "max_radius", default_range);
-        }
-        height_range = width_range;
-    }
-
-    const nlohmann::json width_json = vibble::weighted_range::to_json(width_range);
-    const nlohmann::json height_json = vibble::weighted_range::to_json(height_range);
-    if (!entry.contains("width") || entry["width"] != width_json) {
-        entry["width"] = width_json;
-        changed = true;
-    }
-    if (!is_trail_entry && (!entry.contains("height") || entry["height"] != height_json)) {
-        entry["height"] = height_json;
-        changed = true;
-    }
-    if (is_trail_entry && entry.erase("height") > 0) changed = true;
 
     if (entry.erase("min_width") > 0) changed = true;
     if (entry.erase("max_width") > 0) changed = true;
     if (entry.erase("min_height") > 0) changed = true;
     if (entry.erase("max_height") > 0) changed = true;
+    if (entry.erase("width") > 0) changed = true;
+    if (entry.erase("height") > 0) changed = true;
+    if (entry.erase("geometry") > 0) changed = true;
     if (entry.erase("radius") > 0) changed = true;
     if (entry.erase("min_radius") > 0) changed = true;
     if (entry.erase("max_radius") > 0) changed = true;
@@ -341,37 +268,25 @@ bool normalize_room_config_entry(nlohmann::json& entry,
         changed = true;
     }
 
-    if (entry.erase("edge_smoothness") > 0) changed = true;
-    if (is_trail_entry) {
-        auto normalize_zero_int = [&](const char* key) {
-            auto it = entry.find(key);
-            if (it == entry.end()) {
-                return;
-            }
-            int value = 0;
-            if (it->is_number_integer()) {
-                value = it->get<int>();
-            } else if (it->is_number_float()) {
-                value = static_cast<int>(std::lround(it->get<double>()));
-            }
-            if (!it->is_number() || value != 0) {
-                entry[key] = 0;
-                changed = true;
-            }
-        };
-        // Keep legacy trail keys stable, but force orthogonal layouts at runtime.
-        normalize_zero_int("curvyness");
-        normalize_zero_int("curviness");
-        if (entry.contains("curvyness") && !entry.contains("curviness")) {
-            entry["curviness"] = 0;
-            changed = true;
-        } else if (entry.contains("curviness") && !entry.contains("curvyness")) {
-            entry["curvyness"] = 0;
-            changed = true;
-        }
-    } else {
-        if (entry.erase("curvyness") > 0) changed = true;
-        if (entry.erase("curviness") > 0) changed = true;
+    if (entry.erase("edge_smoothness") > 0) {
+        warn_legacy_drop("edge_smoothness");
+        changed = true;
+    }
+    if (entry.erase("curvyness") > 0) {
+        warn_legacy_drop("curvyness");
+        changed = true;
+    }
+    if (entry.erase("curviness") > 0) {
+        warn_legacy_drop("curviness");
+        changed = true;
+    }
+
+    const nlohmann::json normalized_coarseness = vibble::weighted_range::to_json(
+        entry.contains("coarseness") ? normalize_coarseness_range_value(entry["coarseness"])
+                                      : vibble::weighted_range::make_flat(0));
+    if (!entry.contains("coarseness") || entry["coarseness"] != normalized_coarseness) {
+        entry["coarseness"] = normalized_coarseness;
+        changed = true;
     }
 
     if (!entry.contains("spawn_groups") || !entry["spawn_groups"].is_array()) {
@@ -401,6 +316,167 @@ bool normalize_room_config_section(nlohmann::json& section,
         }
     }
     return changed;
+}
+
+
+void merge_edge_detail_candidate(nlohmann::json& candidate,
+                                 std::map<std::string, nlohmann::json>& merged_candidates) {
+    if (!candidate.is_object()) {
+        return;
+    }
+
+    // Duplicate edge-detail candidates are entries with the same non-weight fields;
+    // their chance/weight values are summed into a canonical chance field.
+    nlohmann::json merge_key_json = candidate;
+    merge_key_json.erase("chance");
+    merge_key_json.erase("weight");
+    const std::string merge_key = merge_key_json.dump();
+
+    double chance = vibble::spawn_group_codec::read_candidate_chance(candidate, 1.0);
+    if (!std::isfinite(chance) || chance < 0.0) {
+        chance = 0.0;
+    }
+
+    auto it = merged_candidates.find(merge_key);
+    if (it == merged_candidates.end()) {
+        nlohmann::json stored = std::move(candidate);
+        stored.erase("weight");
+        if (std::fabs(chance - std::llround(chance)) < 1e-9) {
+            stored["chance"] = static_cast<int>(std::llround(chance));
+        } else {
+            stored["chance"] = chance;
+        }
+        merged_candidates.emplace(merge_key, std::move(stored));
+        return;
+    }
+
+    const double previous = vibble::spawn_group_codec::read_candidate_chance(it->second, 0.0);
+    const double total = std::max(0.0, previous) + chance;
+    if (std::fabs(total - std::llround(total)) < 1e-9) {
+        it->second["chance"] = static_cast<int>(std::llround(total));
+    } else {
+        it->second["chance"] = total;
+    }
+}
+
+bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
+    bool changed = false;
+    const int default_resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
+    int resolution = default_resolution;
+    bool root_resolution_locked = false;
+    std::map<std::string, nlohmann::json> merged_candidates;
+
+    auto merge_config = [&](const nlohmann::json& config, bool is_root_config) {
+        if (!config.is_object()) {
+            return;
+        }
+        if (config.contains("resolution")) {
+            int parsed = resolution;
+            if (json_to_int(config["resolution"], parsed)) {
+                const int parsed_resolution = vibble::grid::clamp_resolution(parsed);
+                if (is_root_config) {
+                    // Root map-wide edge-detail resolution is the user's configured value; preserve
+                    // it exactly instead of merging it upward with defaults or legacy entries.
+                    resolution = parsed_resolution;
+                    root_resolution_locked = true;
+                } else if (!root_resolution_locked) {
+                    // Legacy per-room/trail configs are hoisted to one map-wide pool; in that
+                    // compatibility path only, keep the densest legacy setting.
+                    resolution = std::max(resolution, parsed_resolution);
+                }
+            }
+        }
+        auto candidates_it = config.find("candidates");
+        if (candidates_it == config.end() || !candidates_it->is_array()) {
+            return;
+        }
+        for (const auto& candidate : *candidates_it) {
+            if (!candidate.is_object()) {
+                changed = true;
+                continue;
+            }
+            nlohmann::json candidate_copy = candidate;
+            merge_edge_detail_candidate(candidate_copy, merged_candidates);
+        }
+    };
+
+    auto root_it = map_manifest.find("edge_detail_candidates");
+    if (root_it != map_manifest.end()) {
+        merge_config(*root_it, true);
+        if (!root_it->is_object()) {
+            changed = true;
+        }
+    }
+
+    auto hoist_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+        for (auto entry_it = section_it->begin(); entry_it != section_it->end(); ++entry_it) {
+            if (!entry_it.value().is_object()) {
+                continue;
+            }
+            auto legacy_it = entry_it.value().find("edge_detail_candidates");
+            if (legacy_it == entry_it.value().end()) {
+                continue;
+            }
+            merge_config(*legacy_it, false);
+            entry_it.value().erase(legacy_it);
+            changed = true;
+        }
+    };
+    hoist_section("rooms_data");
+    hoist_section("trails_data");
+
+    nlohmann::json normalized = nlohmann::json::object();
+    normalized["candidates"] = nlohmann::json::array();
+    for (auto& [key, candidate] : merged_candidates) {
+        (void)key;
+        normalized["candidates"].push_back(std::move(candidate));
+    }
+    normalized["resolution"] = resolution;
+
+    vibble::spawn_group_codec::CandidateDefaults defaults;
+    defaults.name = "null";
+    defaults.chance = 0.0;
+    if (vibble::spawn_group_codec::sanitize_spawn_group_candidates(normalized, defaults)) {
+        changed = true;
+    }
+    const int sanitized_resolution = normalized.value("resolution", default_resolution);
+    normalized["resolution"] = vibble::grid::clamp_resolution(sanitized_resolution);
+
+    if (root_it == map_manifest.end() || *root_it != normalized) {
+        map_manifest["edge_detail_candidates"] = std::move(normalized);
+        changed = true;
+    }
+
+    return changed;
+}
+
+
+bool warn_legacy_edge_detail_candidates_after_normalization(const nlohmann::json& map_manifest) {
+    bool found = false;
+    auto check_section = [&](const char* section_name) {
+        auto section_it = map_manifest.find(section_name);
+        if (section_it == map_manifest.end() || !section_it->is_object()) {
+            return;
+        }
+        for (auto entry_it = section_it->begin(); entry_it != section_it->end(); ++entry_it) {
+            if (!entry_it.value().is_object()) {
+                continue;
+            }
+            if (entry_it.value().contains("edge_detail_candidates")) {
+                std::cerr << "[MapManifestNormalizer] Warning: legacy per-entry edge_detail_candidates remains after normalization in "
+                          << section_name << " entry '" << entry_it.key()
+                          << "'; edge details must live at map-level generation data.\n";
+                found = true;
+            }
+        }
+    };
+    check_section("rooms_data");
+    check_section("trails_data");
+    return found;
 }
 
 bool normalize_room_trail_name_collisions(nlohmann::json& map_manifest) {
@@ -474,18 +550,14 @@ bool ensure_map_layers_settings_defaults(nlohmann::json& root) {
 }
 
 nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
     nlohmann::json entry = nlohmann::json::object();
     entry["name"] = spawn_name;
-    entry["geometry"] = "Circle";
-    entry["min_width"] = diameter;
-    entry["max_width"] = diameter;
-    entry["min_height"] = diameter;
-    entry["max_height"] = diameter;
+    entry["size"] = kDefaultRoomSize;
     entry["is_boss"] = false;
     entry["inherits_live_dynamic_assets"] = false;
     entry["inherit_map_floor_color"] = true;
     entry["room_floor_color"] = nlohmann::json::array({0, 0, 0});
+    entry["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     entry["spawn_groups"] = nlohmann::json::array();
     entry["trail_connection_sector"] = nlohmann::json::object({
         {"direction_deg", kDefaultTrailSectorDirectionDeg},
@@ -497,7 +569,7 @@ nlohmann::json make_default_spawn_room(const std::string& spawn_name) {
 nlohmann::json make_room_spawn_group(const std::string& map_name,
                                      const std::string& display_name,
                                      const std::string& asset_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
+    const int default_extent = kDefaultRoomSize * vibble::grid::delta(kDefaultRoomSize) * 2;
     std::string cleaned = map_name;
     for (char& ch : cleaned) {
         if (std::isspace(static_cast<unsigned char>(ch))) {
@@ -518,8 +590,8 @@ nlohmann::json make_room_spawn_group(const std::string& map_name,
     group["locked"] = false;
     group["min_number"] = 1;
     group["max_number"] = 1;
-    group["origional_height"] = diameter;
-    group["origional_width"] = diameter;
+    group["origional_height"] = default_extent;
+    group["origional_width"] = default_extent;
     group["resolution"] = 6;
     group["resolve_geometry_to_room_size"] = true;
     group["resolve_quantity_to_room_size"] = false;
@@ -858,6 +930,12 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
         }
     }
 
+    if (map_manifest.contains("edge_detail_candidates") && map_manifest["edge_detail_candidates"].is_object()) {
+        if (normalize_spawn_group_candidates(map_manifest["edge_detail_candidates"], lookup)) {
+            changed = true;
+        }
+    }
+
     auto normalize_room_like_section = [&](const char* section_name) {
         auto section_it = map_manifest.find(section_name);
         if (section_it == map_manifest.end() || !section_it->is_object()) {
@@ -885,7 +963,6 @@ bool normalize_map_manifest_asset_ids(nlohmann::json& map_manifest,
 } // namespace
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {
-    const int diameter = kDefaultSpawnRadius * 2;
 
     nlohmann::json map_info = nlohmann::json::object();
 
@@ -914,21 +991,27 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"MainTrail", nlohmann::json::object({
             {"name", "MainTrail"},
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
-            {"geometry", "Square"},
-            {"width", vibble::weighted_range::to_json(vibble::weighted_range::make_legacy_uniform(400, 800))},
+            {"size", kDefaultTrailSize},
+            {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
             {"tags", nlohmann::json::array()},
             {"anti_tags", nlohmann::json::array()},
             {"spawn_groups", nlohmann::json::array()}
         })}
     });
 
+    map_info["edge_detail_candidates"] = nlohmann::json::object({
+        {"candidates", nlohmann::json::array({
+            nlohmann::json::object({{"name", "null"}, {"chance", 0}})
+        })},
+        {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+    });
+
     map_info["map_layers_settings"] = nlohmann::json::object({{"min_edge_distance", 200}});
 
     nlohmann::json spawn_room = nlohmann::json::object();
     spawn_room["name"] = "Spawn";
-    spawn_room["geometry"] = "Circle";
-    spawn_room["width"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
-    spawn_room["height"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(diameter));
+    spawn_room["size"] = kDefaultRoomSize;
+    spawn_room["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
     spawn_room["is_boss"] = false;
     spawn_room["inherits_live_dynamic_assets"] = true;
     spawn_room["trail_connection_sector"] = nlohmann::json::object({
@@ -943,10 +1026,10 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             {"kind", "Spawn"},
             {"resolution", 3},
             {"points", nlohmann::json::array({
-                nlohmann::json::object({{"x", -256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", 256}}),
-                nlohmann::json::object({{"x", -256}, {"y", 256}})
+                nlohmann::json::object({{"x", 0}, {"y", -256}}),
+                nlohmann::json::object({{"x", 256}, {"y", 0}}),
+                nlohmann::json::object({{"x", 0}, {"y", 256}}),
+                nlohmann::json::object({{"x", -256}, {"y", 0}})
             })}
         })
     });
@@ -1070,13 +1153,17 @@ MapManifestNormalizationResult normalize_map_manifest(nlohmann::json map_manifes
         }
     };
     normalize_map_default_floor_color();
-    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
-        changed = true;
-    }
     if (normalize_room_config_section(map_manifest["rooms_data"], true, false)) {
         changed = true;
     }
     if (normalize_room_config_section(map_manifest["trails_data"], false, true)) {
+        changed = true;
+    }
+    if (normalize_map_edge_detail_candidates(map_manifest)) {
+        changed = true;
+    }
+    warn_legacy_edge_detail_candidates_after_normalization(map_manifest);
+    if (normalize_map_manifest_asset_ids(map_manifest, asset_catalog)) {
         changed = true;
     }
     if (normalize_room_trail_name_collisions(map_manifest)) {

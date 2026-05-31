@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "acba0522fdbed889",
+          "height": 158,
+          "order": 0,
+          "width": 149
+        }
+      ]
+    }
+  ],
+  "asset_name": "health_beer",
+  "authored_scale_percentage": 100.0,
+  "crop_canvas": {
+    "shared_height": 158,
+    "shared_width": 149
+  },
+  "digest": "148ce42ff5b69421",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

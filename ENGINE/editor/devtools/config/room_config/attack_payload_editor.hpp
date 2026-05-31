@@ -62,9 +62,6 @@ private:
     std::unique_ptr<DMCheckbox> hitback_enabled_checkbox_;
     std::unique_ptr<DMTextBox> hitback_distance_textbox_;
     std::unique_ptr<DMTextBox> stun_frames_textbox_;
-    std::unique_ptr<DMTextBox> animation_trigger_textbox_;
-    std::unique_ptr<DMTextBox> sound_effect_textbox_;
-    std::unique_ptr<DMTextBox> status_effects_textbox_;
     std::unique_ptr<DMTextBox> critical_hit_chance_textbox_;
     std::unique_ptr<DMTextBox> element_type_textbox_;
     std::unique_ptr<DMTextBox> recharge_seconds_textbox_;

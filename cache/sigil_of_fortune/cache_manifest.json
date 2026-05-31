@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "35b90c1e0a252657",
+          "height": 217,
+          "order": 0,
+          "width": 218
+        }
+      ]
+    }
+  ],
+  "asset_name": "sigil_of_fortune",
+  "authored_scale_percentage": 183.99998474121094,
+  "crop_canvas": {
+    "shared_height": 217,
+    "shared_width": 218
+  },
+  "digest": "1a8ae0af3a1a6349",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

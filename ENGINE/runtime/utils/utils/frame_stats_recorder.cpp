@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -130,6 +131,7 @@ std::vector<std::string> default_metric_order() {
         "codex_playtest.segment_kind",
         "codex_playtest.segment_length_frames",
         "codex_playtest.segment_frame",
+        "codex_playtest.profile",
         "codex_playtest.mouse_x",
         "codex_playtest.mouse_y",
         "movement.player_input_x",
@@ -157,6 +159,22 @@ std::vector<std::string> default_metric_order() {
         "movement.player_fallback_shortened_used",
         "movement.player_slide_used",
         "movement.player_unstick_used",
+        "enemy_ai.phase",
+        "enemy_ai.no_progress_frames",
+        "enemy_ai.return_home_fallback_count",
+        "enemy_ai.approach_attempted",
+        "enemy_ai.approach_moved",
+        "enemy_ai.recover_active",
+        "enemy_ai.attack_window_enter_count",
+        "enemy_ai.attack_window_exit_count",
+        "enemy_ai.hit_dispatch_attempt_count",
+        "enemy_ai.hit_dispatch_success_count",
+        "enemy_ai.active_target_scan_hits",
+        "enemy_ai.movement_attack_conflict_flag",
+        "combat.vibble_took_damage",
+        "combat.vibble_last_damage",
+        "combat.vibble_health_after_damage",
+        "combat.vibble_last_attacker",
         "assets.frame_id",
         "assets.frame_dt_raw_seconds",
         "assets.frame_dt_clamped_seconds",
@@ -766,7 +784,20 @@ FrameStatsRecorder& FrameStatsRecorder::instance() {
 }
 
 bool FrameStatsRecorder::enabled() const {
-    return kRuntimeFrameStatsDebugEnabled;
+    if (kRuntimeFrameStatsDebugEnabled) {
+        return true;
+    }
+    const char* explicit_enable = std::getenv("VIBBLE_RUNTIME_FRAME_STATS");
+    if (explicit_enable != nullptr) {
+        const std::string value(explicit_enable);
+        if (value == "1" || value == "true" || value == "TRUE" ||
+            value == "yes" || value == "YES" || value == "on" ||
+            value == "ON") {
+            return true;
+        }
+    }
+    const char* codex_playtest = std::getenv("VIBBLE_CODEX_PLAYTEST_INPUT");
+    return codex_playtest != nullptr && std::string(codex_playtest) == "1";
 }
 
 void FrameStatsRecorder::begin_run() {

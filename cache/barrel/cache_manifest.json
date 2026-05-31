@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "96ed31e885f9d0fa",
+          "height": 218,
+          "order": 0,
+          "width": 174
+        }
+      ]
+    }
+  ],
+  "asset_name": "barrel",
+  "authored_scale_percentage": 63.0,
+  "crop_canvas": {
+    "shared_height": 218,
+    "shared_width": 174
+  },
+  "digest": "15c1a14dd0d5257c",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

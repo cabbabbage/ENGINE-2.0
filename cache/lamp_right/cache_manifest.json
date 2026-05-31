@@ -1,0 +1,25 @@
+{
+  "animations": [
+    {
+      "name": "default",
+      "source_frames": [
+        {
+          "filename": "0.png",
+          "hash": "2e1c5420cdf77879",
+          "height": 1001,
+          "order": 0,
+          "width": 437
+        }
+      ]
+    }
+  ],
+  "asset_name": "lamp_right",
+  "authored_scale_percentage": 58.999996185302734,
+  "crop_canvas": {
+    "shared_height": 1001,
+    "shared_width": 437
+  },
+  "digest": "885ae126761424c6",
+  "generator_version": "image_cache_generator.v4",
+  "schema_version": 2
+}

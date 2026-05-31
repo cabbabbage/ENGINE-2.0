@@ -1,11 +1,18 @@
 #include "path_sanitizer_3d.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "animation_update.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
+#include "collision_query_context.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/area.hpp"
@@ -14,22 +21,108 @@ using CollisionAreaRef3D = const Assets::FrameCollisionEntry*;
 
 namespace {
 
-std::vector<CollisionAreaRef3D> gather_collision_areas(const Asset& self) {
-    std::vector<CollisionAreaRef3D> result;
-    const Assets* assets = self.get_assets();
-    if (!assets) {
-        return result;
-    }
-
-    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
-        ? self.info->NeighborSearchRadius
-        : 0;
-    assets->query_impassable_entries(self, search_radius, result);
-    return result;
-}
-
 world::GridPoint as_grid_point(const axis::WorldPos& pos, int resolution_layer) {
     return world::GridPoint::make_virtual(pos.x, pos.y, pos.z, resolution_layer);
+}
+
+std::string normalized_metadata_token(std::string_view value) {
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (const unsigned char ch : value) {
+        if (std::isalnum(ch)) {
+            normalized.push_back(static_cast<char>(std::tolower(ch)));
+        } else if (!normalized.empty() && normalized.back() != '_') {
+            normalized.push_back('_');
+        }
+    }
+    while (!normalized.empty() && normalized.back() == '_') {
+        normalized.pop_back();
+    }
+    return normalized;
+}
+
+bool contains_token(std::string_view value, std::string_view token) {
+    return normalized_metadata_token(value).find(token) != std::string::npos;
+}
+
+bool metadata_has_any(const AssetInfo& info, const std::vector<std::string>& tags,
+                      const std::array<std::string_view, 12>& tokens) {
+    const auto matches = [&tokens](std::string_view value) {
+        for (const std::string_view token : tokens) {
+            if (contains_token(value, token)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (matches(info.name)) {
+        return true;
+    }
+    for (const std::string& tag : tags) {
+        if (matches(tag)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool explicitly_blocks_gameplay(const AssetInfo& info) {
+    static constexpr std::array<std::string_view, 12> kBlockingTokens{
+        "block", "blocking", "blocker", "obstacle", "solid", "wall",
+        "barrier", "collider", "collision", "impassable", "unwalkable", "gameplay_obstacle"
+    };
+
+    return metadata_has_any(info, info.tags, kBlockingTokens);
+}
+
+bool looks_like_scenery(const AssetInfo& info) {
+    static constexpr std::array<std::string_view, 12> kSceneryTokens{
+        "scenery", "decor", "decoration", "foliage", "grass", "flower",
+        "bush", "shrub", "plant", "leaf", "leaves", "vegetation"
+    };
+
+    return metadata_has_any(info, info.tags, kSceneryTokens);
+}
+
+bool should_avoid_asset_obstacle(const Asset& self, CollisionAreaRef3D entry) {
+    if (!entry || !entry->asset || entry->asset == &self || !entry->asset->info) {
+        return false;
+    }
+
+    const Asset& other = *entry->asset;
+    const AssetInfo& info = *other.info;
+    const std::string canonical_type = asset_types::canonicalize(info.type);
+    if (canonical_type == asset_types::boundary) {
+        return true;
+    }
+
+    if (explicitly_blocks_gameplay(info)) {
+        return true;
+    }
+
+    if (looks_like_scenery(info)) {
+        return false;
+    }
+
+    if (other.isMovementEnabled()) {
+        return true;
+    }
+
+    return canonical_type == asset_types::enemy || canonical_type == asset_types::npc;
+}
+
+std::vector<CollisionAreaRef3D> filtered_asset_obstacles(
+    const Asset& self,
+    const std::vector<CollisionAreaRef3D>& collision_areas) {
+    std::vector<CollisionAreaRef3D> filtered;
+    filtered.reserve(collision_areas.size());
+    for (CollisionAreaRef3D entry : collision_areas) {
+        if (should_avoid_asset_obstacle(self, entry)) {
+            filtered.push_back(entry);
+        }
+    }
+    return filtered;
 }
 
 bool same_world_point(const axis::WorldPos& lhs, const axis::WorldPos& rhs) {
@@ -120,16 +213,29 @@ axis::WorldPos walk_back_to_perimeter(const axis::WorldPos& start,
 std::vector<axis::WorldPos> PathSanitizer3D::sanitize(
     const Asset& self,
     const std::vector<axis::WorldPos>& absolute_checkpoints,
-    int visited_thresh_px) const {
+    int visited_thresh_px,
+    CollisionQueryContext* collision_context) const {
     std::vector<axis::WorldPos> sanitized;
     if (absolute_checkpoints.empty()) {
         return sanitized;
     }
 
-    const auto collision_areas = gather_collision_areas(self);
-    const axis::WorldPos origin{ self.world_x(), self.world_y(), self.world_z() };
-    const long long thresh_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const Assets* assets = self.get_assets();
+    const axis::WorldPos origin{ self.world_x(), self.world_y(), self.world_z() };
+    int furthest_checkpoint_distance_px = 0;
+    for (const axis::WorldPos& checkpoint : absolute_checkpoints) {
+        const long long dx = static_cast<long long>(checkpoint.x) - static_cast<long long>(origin.x);
+        const long long dz = static_cast<long long>(checkpoint.z) - static_cast<long long>(origin.z);
+        const int distance = static_cast<int>(std::lround(std::sqrt(static_cast<double>(dx * dx + dz * dz))));
+        furthest_checkpoint_distance_px = std::max(furthest_checkpoint_distance_px, distance);
+    }
+    CollisionQueryContext local_collision_context;
+    CollisionQueryContext& context = collision_context ? *collision_context : local_collision_context;
+    if (!collision_context) {
+        context.set_furthest_checkpoint_distance_px(furthest_checkpoint_distance_px);
+    }
+    const auto collision_areas = filtered_asset_obstacles(self, context.collisions_for(self));
+    const long long thresh_sq = static_cast<long long>(visited_thresh_px) * visited_thresh_px;
     const int resolution_layer = self.grid_resolution;
 
     for (const axis::WorldPos& checkpoint : absolute_checkpoints) {

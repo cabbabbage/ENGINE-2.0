@@ -20,8 +20,11 @@ set "RUN_EXIT_CODE=0"
 
 if not defined CODEX_PLAYTEST_MAP set "CODEX_PLAYTEST_MAP=forrest"
 if not defined CODEX_PLAYTEST_SECONDS set "CODEX_PLAYTEST_SECONDS=60"
+if not defined CODEX_PLAYTEST_PROFILE set "CODEX_PLAYTEST_PROFILE=default"
 if not defined CODEX_PLAYTEST_ALLOW_SHORT set "CODEX_PLAYTEST_ALLOW_SHORT=0"
+if /I "%CODEX_PLAYTEST_PROFILE%"=="spider_slow" set "CODEX_PLAYTEST_ALLOW_SHORT=1"
 for /f %%S in ('powershell -NoProfile -Command "$s=60; [void][int]::TryParse($env:CODEX_PLAYTEST_SECONDS,[ref]$s); if($env:CODEX_PLAYTEST_ALLOW_SHORT -eq "1"){ [Math]::Max(1,$s) } else { [Math]::Max(60,$s) }"') do set "CODEX_PLAYTEST_SECONDS=%%S"
+if /I "%CODEX_PLAYTEST_PROFILE%"=="spider_slow" if "%CODEX_PLAYTEST_SECONDS%"=="60" set "CODEX_PLAYTEST_SECONDS=120"
 if not defined CODEX_PLAYTEST_REPORT set "CODEX_PLAYTEST_REPORT=codex_playtest_report.md"
 if not defined VIBBLE_SAFE_LOADING set "VIBBLE_SAFE_LOADING=1"
 
@@ -34,17 +37,20 @@ if not defined CODEX_PLAYTEST_FRAME_LIMIT (
 set "VIBBLE_AUTOSTART_MAP=%CODEX_PLAYTEST_MAP%"
 set "VIBBLE_RUNTIME_FRAME_LIMIT=%CODEX_PLAYTEST_FRAME_LIMIT%"
 set "VIBBLE_CODEX_PLAYTEST_INPUT=1"
+set "VIBBLE_CODEX_PLAYTEST_PROFILE=%CODEX_PLAYTEST_PROFILE%"
 set "METADATA_FILE=%REPO_ROOT%\codex_playtest_metadata.json"
 set "REPORT_PATH=%REPO_ROOT%\%CODEX_PLAYTEST_REPORT%"
 
 echo [codex_playtest.bat] Repo root: %REPO_ROOT%
 echo [codex_playtest.bat] Map: %CODEX_PLAYTEST_MAP%
 echo [codex_playtest.bat] Seconds: %CODEX_PLAYTEST_SECONDS%
+echo [codex_playtest.bat] Profile: %CODEX_PLAYTEST_PROFILE%
 echo [codex_playtest.bat] Frame limit: %CODEX_PLAYTEST_FRAME_LIMIT%
 echo [codex_playtest.bat] Report: %REPORT_PATH%
 
 call :RotateFile "%REPO_ROOT%\log.txt"
 call :RotateFile "%REPO_ROOT%\runtime_frame_stats.csv"
+call :RotateFile "%REPO_ROOT%\ENGINE\runtime_frame_stats.csv"
 for %%P in (
     "%REPO_ROOT%\codex_playtest_stdout.log"
     "%REPO_ROOT%\codex_playtest_stderr.log"
@@ -69,6 +75,7 @@ if not "%BUILD_EXIT_CODE%"=="0" (
         -TimeoutForcedKill:$false ^
         -DurationSeconds 0 ^
         -Map "%CODEX_PLAYTEST_MAP%" ^
+        -Profile "%CODEX_PLAYTEST_PROFILE%" ^
         -FrameLimit %CODEX_PLAYTEST_FRAME_LIMIT% ^
         -LauncherLogPath "%LAUNCHER_LOG%" ^
         -StdoutPath "%REPO_ROOT%\codex_playtest_stdout.log" ^
@@ -90,6 +97,7 @@ if not exist "%EXE%" (
         -TimeoutForcedKill:$false ^
         -DurationSeconds 0 ^
         -Map "%CODEX_PLAYTEST_MAP%" ^
+        -Profile "%CODEX_PLAYTEST_PROFILE%" ^
         -FrameLimit %CODEX_PLAYTEST_FRAME_LIMIT% ^
         -LauncherLogPath "%LAUNCHER_LOG%" ^
         -StdoutPath "%REPO_ROOT%\codex_playtest_stdout.log" ^
@@ -105,6 +113,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\scripts\codex_p
     -Map "%CODEX_PLAYTEST_MAP%" ^
     -Seconds %CODEX_PLAYTEST_SECONDS% ^
     -FrameLimit %CODEX_PLAYTEST_FRAME_LIMIT% ^
+    -Profile "%CODEX_PLAYTEST_PROFILE%" ^
     -ReportPath "%REPORT_PATH%" ^
     -MetadataPath "%METADATA_FILE%" ^
     -LauncherLogPath "%LAUNCHER_LOG%" ^

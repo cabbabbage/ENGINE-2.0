@@ -5,7 +5,7 @@
 #include "asset_info.hpp"
 #include "asset_types.hpp"
 #include "animation/controllers/shared/attack_payload.hpp"
-#include "rendering/render/scaling_logic.hpp"
+
 #include "json_coercion.hpp"
 #include "surface_utils.hpp"
 #include "utils/cache_manager.hpp"
@@ -38,6 +38,13 @@ using json_coercion::read_bool_field_like;
 using json_coercion::read_float_field_like;
 using json_coercion::read_int_field_like;
 using json_coercion::read_string_field_like;
+
+float quantize_anchor_depth_offset_world_units(float value) {
+        if (!std::isfinite(value)) {
+                return 0.0f;
+        }
+        return static_cast<float>(std::lround(value));
+}
 
 std::string read_on_end_value(const nlohmann::json& payload) {
         if (!payload.is_object() || !payload.contains("on_end")) {
@@ -238,10 +245,8 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node,
 
         anchor.texture_x = node["texture_x"].get<int>();
         anchor.texture_y = node["texture_y"].get<int>();
-        anchor.depth_offset = read_float_field_like(node, "depth_offset", 0.0f);
-        if (!std::isfinite(anchor.depth_offset)) {
-                anchor.depth_offset = 0.0f;
-        }
+        anchor.depth_offset = quantize_anchor_depth_offset_world_units(
+            read_float_field_like(node, "depth_offset", 0.0f));
         anchor.flip_horizontal = read_bool_field_like(node, "flip_horizontal", default_flip_horizontal);
         anchor.flip_vertical = read_bool_field_like(node, "flip_vertical", default_flip_vertical);
         anchor.rotation_degrees = read_float_field_like(node, "rotation_degrees", default_rotation_degrees);
@@ -493,8 +498,8 @@ animation_update::FrameBoxRect parse_box_rect(const nlohmann::json& node) {
                 }
                 const auto& corner_node = corners[idx];
                 parsed_corners.push_back(animation_update::FrameBoxCorner{
-                    std::max(0, read_int_field_like(corner_node, "texture_x", 0)),
-                    std::max(0, read_int_field_like(corner_node, "texture_y", 0)),
+                    read_int_field_like(corner_node, "texture_x", 0),
+                    read_int_field_like(corner_node, "texture_y", 0),
                 });
         }
         if (!parsed_corners.empty()) {
@@ -952,6 +957,258 @@ void apply_scale_mode(SDL_Texture*, const AssetInfo&) {}
 #endif
 
 
+
+struct RuntimeCropBounds {
+        int left = 0;
+        int top = 0;
+        int right = 0;   // exclusive
+        int bottom = 0;  // exclusive
+        bool visible = false;
+};
+
+static std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)> make_surface_ptr(SDL_Surface* surface) {
+        return { surface, SDL_DestroySurface };
+}
+
+static Uint8 surface_alpha_at(const SDL_Surface* surface, int x, int y) {
+        if (!surface || !surface->pixels || x < 0 || y < 0 || x >= surface->w || y >= surface->h) {
+                return 0;
+        }
+
+        const auto* row = static_cast<const Uint8*>(surface->pixels) + static_cast<std::size_t>(y) * surface->pitch;
+        const auto* px = row + static_cast<std::size_t>(x) * 4;
+
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+        return px[0];
+#else
+        return px[3];
+#endif
+}
+
+static void copy_rgba_pixel(SDL_Surface* dst, int dst_x, int dst_y, const SDL_Surface* src, int src_x, int src_y) {
+        if (!dst || !src || !dst->pixels || !src->pixels) {
+                return;
+        }
+        if (dst_x < 0 || dst_y < 0 || src_x < 0 || src_y < 0 ||
+            dst_x >= dst->w || dst_y >= dst->h || src_x >= src->w || src_y >= src->h) {
+                return;
+        }
+
+        auto* dst_row = static_cast<Uint8*>(dst->pixels) + static_cast<std::size_t>(dst_y) * dst->pitch;
+        const auto* src_row = static_cast<const Uint8*>(src->pixels) + static_cast<std::size_t>(src_y) * src->pitch;
+
+        SDL_memcpy(dst_row + static_cast<std::size_t>(dst_x) * 4,
+                   src_row + static_cast<std::size_t>(src_x) * 4,
+                   4);
+}
+
+static RuntimeCropBounds find_alpha_bounds(const SDL_Surface* surface) {
+        RuntimeCropBounds bounds{};
+        if (!surface || surface->w <= 0 || surface->h <= 0) {
+                return bounds;
+        }
+
+        bounds.left = surface->w;
+        bounds.top = surface->h;
+        bounds.right = 0;
+        bounds.bottom = 0;
+
+        for (int y = 0; y < surface->h; ++y) {
+                for (int x = 0; x < surface->w; ++x) {
+                        if (surface_alpha_at(surface, x, y) == 0) {
+                                continue;
+                        }
+
+                        bounds.visible = true;
+                        bounds.left = std::min(bounds.left, x);
+                        bounds.top = std::min(bounds.top, y);
+                        bounds.right = std::max(bounds.right, x + 1);
+                        bounds.bottom = std::max(bounds.bottom, y + 1);
+                }
+        }
+
+        if (!bounds.visible) {
+                bounds.left = 0;
+                bounds.top = 0;
+                bounds.right = 0;
+                bounds.bottom = 0;
+        }
+
+        return bounds;
+}
+
+static std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>
+convert_to_rgba32(SDL_Surface* source) {
+        if (!source) {
+                return make_surface_ptr(nullptr);
+        }
+
+        SDL_Surface* converted = SDL_ConvertSurface(source, SDL_PIXELFORMAT_RGBA32);
+        return make_surface_ptr(converted);
+}
+
+static std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>
+read_texture_to_rgba32(SDL_Renderer* renderer, SDL_Texture* texture) {
+        if (!renderer || !texture) {
+                return make_surface_ptr(nullptr);
+        }
+
+        SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
+        if (!SDL_SetRenderTarget(renderer, texture)) {
+                SDL_SetRenderTarget(renderer, previous_target);
+                return make_surface_ptr(nullptr);
+        }
+
+        SDL_Surface* readback = SDL_RenderReadPixels(renderer, nullptr);
+        SDL_SetRenderTarget(renderer, previous_target);
+
+        if (!readback) {
+                return make_surface_ptr(nullptr);
+        }
+
+        auto readback_ptr = make_surface_ptr(readback);
+        return convert_to_rgba32(readback_ptr.get());
+}
+
+static std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>
+shift_bottom_transparent_rows_down(SDL_Surface* source) {
+        if (!source || source->w <= 0 || source->h <= 0) {
+                return make_surface_ptr(nullptr);
+        }
+
+        RuntimeCropBounds bounds = find_alpha_bounds(source);
+        if (!bounds.visible) {
+                SDL_Surface* clone = SDL_DuplicateSurface(source);
+                return make_surface_ptr(clone);
+        }
+
+        const int shift = source->h - bounds.bottom;
+        if (shift <= 0) {
+                SDL_Surface* clone = SDL_DuplicateSurface(source);
+                return make_surface_ptr(clone);
+        }
+
+        SDL_Surface* shifted = SDL_CreateSurface(source->w, source->h, SDL_PIXELFORMAT_RGBA32);
+        if (!shifted) {
+                return make_surface_ptr(nullptr);
+        }
+
+        auto shifted_ptr = make_surface_ptr(shifted);
+        SDL_ClearSurface(shifted_ptr.get(), 0.0f, 0.0f, 0.0f, 0.0f);
+
+        for (int y = 0; y < source->h - shift; ++y) {
+                for (int x = 0; x < source->w; ++x) {
+                        copy_rgba_pixel(shifted_ptr.get(), x, y + shift, source, x, y);
+                }
+        }
+
+        return shifted_ptr;
+}
+
+static SDL_Texture* create_texture_from_rgba32_surface(SDL_Renderer* renderer,
+                                                       SDL_Surface* surface,
+                                                       const AssetInfo& info) {
+        if (!renderer || !surface) {
+                return nullptr;
+        }
+
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+        apply_scale_mode(texture, info);
+        return texture;
+}
+
+static bool normalize_prebuilt_frame_cache_crop(std::vector<Animation::FrameCache>& frames,
+                                                SDL_Renderer* renderer,
+                                                const AssetInfo& info,
+                                                int& canvas_width,
+                                                int& canvas_height) {
+        if (!renderer || frames.empty()) {
+                return false;
+        }
+
+        std::vector<std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>> shifted_surfaces;
+        std::vector<RuntimeCropBounds> bounds_by_frame;
+        shifted_surfaces.reserve(frames.size());
+        bounds_by_frame.reserve(frames.size());
+
+        int uniform_width = 0;
+        int uniform_height = 0;
+
+        for (auto& frame : frames) {
+                auto raw_surface = read_texture_to_rgba32(renderer, frame.texture);
+                if (!raw_surface) {
+                        return false;
+                }
+
+                auto shifted = shift_bottom_transparent_rows_down(raw_surface.get());
+                if (!shifted) {
+                        return false;
+                }
+
+                RuntimeCropBounds bounds = find_alpha_bounds(shifted.get());
+                bounds_by_frame.push_back(bounds);
+
+                if (bounds.visible) {
+                        uniform_width = std::max(uniform_width, bounds.right - bounds.left);
+                        uniform_height = std::max(uniform_height, bounds.bottom - bounds.top);
+                }
+
+                shifted_surfaces.push_back(std::move(shifted));
+        }
+
+        if (uniform_width <= 0 || uniform_height <= 0) {
+                return false;
+        }
+
+        for (std::size_t i = 0; i < frames.size(); ++i) {
+                const RuntimeCropBounds& bounds = bounds_by_frame[i];
+                SDL_Surface* source = shifted_surfaces[i].get();
+
+                SDL_Surface* canvas = SDL_CreateSurface(uniform_width, uniform_height, SDL_PIXELFORMAT_RGBA32);
+                if (!canvas) {
+                        return false;
+                }
+
+                auto canvas_ptr = make_surface_ptr(canvas);
+                SDL_ClearSurface(canvas_ptr.get(), 0.0f, 0.0f, 0.0f, 0.0f);
+
+                if (bounds.visible) {
+                        const int content_width = bounds.right - bounds.left;
+                        const int content_height = bounds.bottom - bounds.top;
+                        const int paste_x = (uniform_width - content_width) / 2;
+                        const int paste_y = uniform_height - content_height;
+
+                        for (int y = 0; y < content_height; ++y) {
+                                for (int x = 0; x < content_width; ++x) {
+                                        copy_rgba_pixel(canvas_ptr.get(),
+                                                       paste_x + x,
+                                                       paste_y + y,
+                                                       source,
+                                                       bounds.left + x,
+                                                       bounds.top + y);
+                                }
+                        }
+                }
+
+                SDL_Texture* new_texture = create_texture_from_rgba32_surface(renderer, canvas_ptr.get(), info);
+                if (!new_texture) {
+                        return false;
+                }
+
+                if (frames[i].texture) {
+                        SDL_DestroyTexture(frames[i].texture);
+                }
+
+                frames[i].texture = new_texture;
+                frames[i].width = uniform_width;
+                frames[i].height = uniform_height;
+        }
+
+        canvas_width = uniform_width;
+        canvas_height = uniform_height;
+        return true;
+}
+
 }
 
 void AnimationLoader::load(Animation& animation,
@@ -1249,15 +1506,35 @@ void AnimationLoader::load(Animation& animation,
         } else if (animation.source.kind == "folder") {
                 if (prebuilt_frames && !prebuilt_frames->frames.empty()) {
                         animation.frame_cache_ = std::move(prebuilt_frames->frames);
-                        original_canvas_width = prebuilt_frames->canvas_width;
-                        original_canvas_height = prebuilt_frames->canvas_height;
-                        scaled_sprite_w = prebuilt_frames->canvas_width;
-                        scaled_sprite_h = prebuilt_frames->canvas_height;
+
+                        int normalized_canvas_w = prebuilt_frames->canvas_width;
+                        int normalized_canvas_h = prebuilt_frames->canvas_height;
+
+                        if (info.crop_on_load) {
+                                const bool normalized =
+                                normalize_prebuilt_frame_cache_crop(animation.frame_cache_,
+                                                                        renderer,
+                                                                        info,
+                                                                        normalized_canvas_w,
+                                                                        normalized_canvas_h);
+
+                                if (!normalized) {
+                                        std::cerr << "[AnimationLoader] " << info.name << "::" << trigger
+                                                << " failed runtime cache crop normalization; using prebuilt cache frames as-is.\n";
+                                        normalized_canvas_w = prebuilt_frames->canvas_width;
+                                        normalized_canvas_h = prebuilt_frames->canvas_height;
+                                }
+                        }
+
+                        original_canvas_width = normalized_canvas_w;
+                        original_canvas_height = normalized_canvas_h;
+                        scaled_sprite_w = normalized_canvas_w;
+                        scaled_sprite_h = normalized_canvas_h;
                         loaded_from_cache = true;
                 } else {
                         cache_invalid_detected = true;
                         std::cerr << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " missing bundle frames; aborting animation load.\n";
+                                << " missing bundle frames; aborting animation load.\n";
                         flush_diagnostics();
                         return;
                 }

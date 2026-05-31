@@ -5,60 +5,50 @@
 #include "gameplay/map_generation/room_legacy_migration.hpp"
 
 int main() {
-    using vibble::weighted_range::WeightedIntRange;
-    const WeightedIntRange fallback = vibble::weighted_range::make_legacy_uniform(64, 64);
-
-    // (a) modern manifest-only path
+    // (a) modern size path
     nlohmann::json modern = {
-        {"width", { {"center", 120}, {"span", 0} }},
-        {"height", { {"center", 88}, {"span", 0} }},
-        {"geometry", "square"}
+        {"size", 12}
     };
     std::vector<std::string> modern_events;
-    auto modern_ranges = room_legacy_migration::resolve_dimension_ranges(
+    auto modern_size = room_legacy_migration::resolve_room_size(
         modern,
-        fallback,
+        9,
+        7,
+        20,
+        false,
         [&modern_events](const char* reason) { modern_events.emplace_back(reason ? reason : ""); });
-    assert(modern_ranges.width.center == 120);
-    assert(modern_ranges.height.center == 88);
-    assert(!modern_ranges.used_legacy_migration);
+    assert(modern_size.size == 12);
+    assert(!modern_size.used_legacy_migration);
     assert(modern_events.empty());
 
-    // (b) legacy migration path
+    // (b) missing size defaults to migration value
     nlohmann::json legacy = {
         {"geometry", "circle"},
-        {"min_radius", 11},
-        {"max_radius", 13}
+        {"width", {{"center", 200}, {"span", 100}}}
     };
     std::vector<std::string> legacy_events;
-    auto legacy_ranges = room_legacy_migration::resolve_dimension_ranges(
+    auto legacy_size = room_legacy_migration::resolve_room_size(
         legacy,
-        fallback,
+        9,
+        7,
+        20,
+        false,
         [&legacy_events](const char* reason) { legacy_events.emplace_back(reason ? reason : ""); });
-    assert(legacy_ranges.used_legacy_migration);
-    assert(legacy_ranges.width.center == 12);
-    assert(legacy_ranges.width.span == 1);
-    assert(legacy_ranges.height.center == legacy_ranges.width.center);
+    assert(legacy_size.size == 9);
+    assert(legacy_size.used_legacy_migration);
     assert(!legacy_events.empty());
 
-    // (c) boundary handoff correctness (manifest width + legacy height fallback)
-    nlohmann::json hybrid = {
-        {"width", { {"center", 150}, {"span", 0} }},
-        {"min_height", 20},
-        {"max_height", 22},
-        {"geometry", "square"}
-    };
-    bool saw_boundary_migration = false;
-    auto hybrid_ranges = room_legacy_migration::resolve_dimension_ranges(
-        hybrid,
-        fallback,
-        [&saw_boundary_migration](const char* reason) {
-            if (reason && std::string(reason) == "legacy_dimension_bounds") {
-                saw_boundary_migration = true;
-            }
-        });
-    assert(hybrid_ranges.width.center == 150);
-    assert(hybrid_ranges.height.center == 21);
-    assert(hybrid_ranges.used_legacy_migration);
-    assert(saw_boundary_migration);
+    // (c) bounds clamp
+    nlohmann::json clamped_low = {{"size", 1}};
+    auto low_size = room_legacy_migration::resolve_room_size(clamped_low, 9, 7, 20, false, nullptr);
+    assert(low_size.size == 7);
+
+    nlohmann::json clamped_high = {{"size", 100}};
+    auto high_size = room_legacy_migration::resolve_room_size(clamped_high, 9, 7, 20, false, nullptr);
+    assert(high_size.size == 20);
+
+    // (d) trail out-of-range coerces to default 5
+    nlohmann::json trail_invalid = {{"size", 99}};
+    auto trail_size = room_legacy_migration::resolve_room_size(trail_invalid, 5, 5, 10, true, nullptr);
+    assert(trail_size.size == 5);
 }

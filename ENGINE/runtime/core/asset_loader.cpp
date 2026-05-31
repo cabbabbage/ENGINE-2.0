@@ -42,6 +42,25 @@ using json = nlohmann::json;
 
 namespace {
 
+std::uint64_t mix_u64(std::uint64_t seed, std::uint64_t value) {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+        return seed;
+}
+
+std::uint64_t build_map_coarseness_seed(const std::string& map_id, const nlohmann::json& manifest) {
+        std::uint64_t seed = std::hash<std::string>{}(map_id);
+        if (manifest.is_object()) {
+                auto map_info_it = manifest.find("map_info");
+                if (map_info_it != manifest.end() && map_info_it->is_object()) {
+                        auto regen_it = map_info_it->find("regen_seed");
+                        if (regen_it != map_info_it->end() && regen_it->is_number_integer()) {
+                                seed = mix_u64(seed, static_cast<std::uint64_t>(regen_it->get<std::int64_t>()));
+                        }
+                }
+        }
+        return seed;
+}
+
 bool asset_info_has_default_frames(const std::shared_ptr<AssetInfo>& info) {
         if (!info) {
                 return false;
@@ -337,7 +356,8 @@ void AssetLoader::loadRooms() {
                         }
                 }
 
-                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms);
+                const std::uint64_t coarseness_seed = build_map_coarseness_seed(map_id_, map_manifest_json_);
+                vibble::mapgen::coarseness::apply_coarseness_expansion(rooms, coarseness_seed);
 
                 const nlohmann::json* edge_detail_candidates = nullptr;
                 auto edge_detail_it = map_manifest_json_.find("edge_detail_candidates");

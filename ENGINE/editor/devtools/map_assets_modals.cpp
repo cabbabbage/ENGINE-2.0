@@ -384,7 +384,9 @@ public:
               bool include_position_jitter = true,
               std::string panel_title = {},
               std::string resolution_field = "grid_resolution",
-              bool use_spawn_group_defaults = true) {
+              bool use_spawn_group_defaults = true,
+              int resolution_min = kMapWideGridResolutionMin,
+              int resolution_max = kMapWideGridResolutionMax) {
         entry_ = entry;
         default_display_name_ = std::move(default_display_name);
         ownership_label_ = std::move(ownership_label);
@@ -395,6 +397,8 @@ public:
         panel_title_override_ = std::move(panel_title);
         resolution_field_ = resolution_field.empty() ? std::string{"grid_resolution"} : std::move(resolution_field);
         use_spawn_group_defaults_ = use_spawn_group_defaults;
+        resolution_min_ = std::clamp(resolution_min, 0, vibble::grid::kMaxResolution);
+        resolution_max_ = std::clamp(resolution_max, resolution_min_, vibble::grid::kMaxResolution);
 
         if (!ownership_label_.empty()) {
             if (!ownership_label_widget_) ownership_label_widget_ = std::make_unique<LabelWidget>();
@@ -451,8 +455,8 @@ public:
         const int resolution = current_grid_resolution();
         if (!grid_resolution_stepper_) {
             grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (2^r px)",
-                                                                          kMapWideGridResolutionMin,
-                                                                          kMapWideGridResolutionMax,
+                                                                          resolution_min_,
+                                                                          resolution_max_,
                                                                           resolution);
             grid_resolution_stepper_->set_step(1);
             grid_resolution_stepper_->set_on_change([this](int value) { this->update_grid_resolution(value); });
@@ -717,15 +721,15 @@ private:
     }
 
     int current_grid_resolution() const {
-        if (!entry_) return kMapWideGridResolutionMin;
-        int value = vibble::spawn_group_codec::read_int_field(*entry_, resolution_field_.c_str(), kMapWideGridResolutionMin);
+        if (!entry_) return resolution_min_;
+        int value = vibble::spawn_group_codec::read_int_field(*entry_, resolution_field_.c_str(), resolution_min_);
         return clamp_map_grid_resolution(value);
     }
 
-    static int clamp_map_grid_resolution(int value) {
-        int clamped = std::clamp(value, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+    int clamp_map_grid_resolution(int value) const {
+        int clamped = std::clamp(value, resolution_min_, resolution_max_);
         clamped = vibble::grid::clamp_resolution(clamped);
-        return std::clamp(clamped, kMapWideGridResolutionMin, kMapWideGridResolutionMax);
+        return std::clamp(clamped, resolution_min_, resolution_max_);
     }
 
     void update_grid_resolution(int value) {
@@ -761,6 +765,8 @@ private:
     bool include_position_jitter_ = true;
     std::string panel_title_override_{};
     std::string resolution_field_{"grid_resolution"};
+    int resolution_min_ = kMapWideGridResolutionMin;
+    int resolution_max_ = kMapWideGridResolutionMax;
     bool use_spawn_group_defaults_ = true;
 
     int current_position_jitter() const {
@@ -1903,7 +1909,9 @@ void EdgeDetailCandidatesModal::open(json& map_info, SaveCallback on_save) {
                  false,
                  "Map-wide Edge Detail Candidates",
                  "resolution",
-                 false);
+                 false,
+                 0,
+                 vibble::grid::kMaxResolution);
     panel_->set_on_close([this]() {
         if (on_close_) on_close_();
     });

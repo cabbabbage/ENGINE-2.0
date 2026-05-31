@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <cstdint>
 #include <vector>
 
 class Room;
@@ -18,6 +19,7 @@ struct CoarsenessGeometryItem {
     Area* geometry = nullptr;
     std::optional<vibble::weighted_range::WeightedIntRange> coarseness_range;
     MapGridSettings grid_settings{};
+    std::uint64_t deterministic_seed = 0;
 };
 
 struct CoarsenessExpansionResult {
@@ -33,6 +35,6 @@ struct CoarsenessExpansionResult {
 };
 
 std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<CoarsenessGeometryItem>& items);
-void apply_coarseness_expansion(std::vector<Room*>& rooms);
+void apply_coarseness_expansion(std::vector<Room*>& rooms, std::uint64_t deterministic_seed = 0);
 
 }

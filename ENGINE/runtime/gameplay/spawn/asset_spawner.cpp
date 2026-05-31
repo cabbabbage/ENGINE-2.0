@@ -70,9 +70,71 @@ bool area_has_points(const Area& area) {
     return !area.get_points().empty() && area.get_area() > 0.0;
 }
 
-bool intersects_any_area(const Area& area, const std::vector<Area>& areas) {
+int orientation(SDL_Point a, SDL_Point b, SDL_Point c) {
+    const long long v = static_cast<long long>(b.y - a.y) * static_cast<long long>(c.x - b.x) -
+                        static_cast<long long>(b.x - a.x) * static_cast<long long>(c.y - b.y);
+    if (v == 0) return 0;
+    return v > 0 ? 1 : 2;
+}
+
+bool on_segment(SDL_Point a, SDL_Point b, SDL_Point c) {
+    return b.x <= std::max(a.x, c.x) && b.x >= std::min(a.x, c.x) &&
+           b.y <= std::max(a.y, c.y) && b.y >= std::min(a.y, c.y);
+}
+
+bool segments_intersect(SDL_Point p1, SDL_Point q1, SDL_Point p2, SDL_Point q2) {
+    const int o1 = orientation(p1, q1, p2);
+    const int o2 = orientation(p1, q1, q2);
+    const int o3 = orientation(p2, q2, p1);
+    const int o4 = orientation(p2, q2, q1);
+    if (o1 != o2 && o3 != o4) return true;
+    if (o1 == 0 && on_segment(p1, p2, q1)) return true;
+    if (o2 == 0 && on_segment(p1, q2, q1)) return true;
+    if (o3 == 0 && on_segment(p2, p1, q2)) return true;
+    if (o4 == 0 && on_segment(p2, q1, q2)) return true;
+    return false;
+}
+
+bool areas_overlap_precisely(const Area& a, const Area& b) {
+    if (!area_has_points(a) || !area_has_points(b)) {
+        return false;
+    }
+    auto [a_min_x, a_min_y, a_max_x, a_max_y] = a.get_bounds();
+    auto [b_min_x, b_min_y, b_max_x, b_max_y] = b.get_bounds();
+    if (a_max_x < b_min_x || b_max_x < a_min_x || a_max_y < b_min_y || b_max_y < a_min_y) {
+        return false;
+    }
+
+    const auto& a_points = a.get_points();
+    const auto& b_points = b.get_points();
+    if (a_points.size() < 3 || b_points.size() < 3) {
+        return a.intersects(b);
+    }
+
+    for (std::size_t i = 0; i < a_points.size(); ++i) {
+        const SDL_Point a0 = a_points[i];
+        const SDL_Point a1 = a_points[(i + 1) % a_points.size()];
+        for (std::size_t j = 0; j < b_points.size(); ++j) {
+            const SDL_Point b0 = b_points[j];
+            const SDL_Point b1 = b_points[(j + 1) % b_points.size()];
+            if (segments_intersect(a0, a1, b0, b1)) {
+                return true;
+            }
+        }
+    }
+
+    if (a.contains_point(b_points.front())) {
+        return true;
+    }
+    if (b.contains_point(a_points.front())) {
+        return true;
+    }
+    return false;
+}
+
+bool intersects_any_area_precisely(const Area& area, const std::vector<Area>& areas) {
     return std::any_of(areas.begin(), areas.end(), [&](const Area& other) {
-        return area_has_points(other) && area.intersects(other);
+        return areas_overlap_precisely(area, other);
     });
 }
 
@@ -356,6 +418,18 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                 continue;
                         }
                         const SDL_Point spawn_pos = vertex->world;
+                        const bool inside_other_original =
+                            std::any_of(original_spawn_exclusion_areas.begin(),
+                                        original_spawn_exclusion_areas.end(),
+                                        [&](const Area& other_original) {
+                                            return area_has_points(other_original) &&
+                                                   other_original.contains_point(spawn_pos);
+                                        });
+                        if (inside_other_original) {
+                                ++skipped_overlap_regions;
+                                occupancy.set_occupied(vertex, true);
+                                continue;
+                        }
                         constexpr int kMaxCandidateRetriesPerVertex = 4;
                         std::unordered_set<std::string> attempted_candidates;
 
@@ -418,10 +492,10 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                 std::string rejection_reason;
                                 if (footprint->intersects(original_area)) {
                                         rejection_reason = "intersects-original-pre-coarseness-area";
-                                } else if (intersects_any_area(*footprint, original_spawn_exclusion_areas)) {
+                                } else if (intersects_any_area_precisely(*footprint, original_spawn_exclusion_areas)) {
                                         rejection_reason = "intersects-another-room-or-trail-original-area";
                                         ++skipped_overlap_regions;
-                                } else if (intersects_any_area(*footprint, exclusion_zones)) {
+                                } else if (intersects_any_area_precisely(*footprint, exclusion_zones)) {
                                         rejection_reason = "overlaps-normal-spawned-asset";
                                 } else {
                                         for (const auto& existing_edge : all_) {
@@ -437,7 +511,7 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                                 }
                                         }
                                 }
-                                if (rejection_reason.empty() && intersects_any_area(*footprint, claimed_edge_detail_regions)) {
+                                if (rejection_reason.empty() && intersects_any_area_precisely(*footprint, claimed_edge_detail_regions)) {
                                         rejection_reason = "overlaps-claimed-edge-detail-region";
                                 }
 

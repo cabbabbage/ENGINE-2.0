@@ -811,8 +811,8 @@ private:
         devmode::core::DevSaveCoordinator::Priority priority);
     bool persist_oval_mappings(devmode::core::DevSaveCoordinator::Priority priority,
                                bool flush_now,
-                               const char* reason,
-                               const char* flush_tag);
+                               const char* reason = nullptr,
+                               const char* flush_tag = nullptr);
     void refresh_oval_mode_handles();
     std::unordered_set<std::string> valid_oval_center_anchor_names(const AssetInfo& info) const;
     bool is_valid_oval_center_anchor_name(const std::string& anchor_name) const;

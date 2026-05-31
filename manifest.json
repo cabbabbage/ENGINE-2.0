@@ -27924,8 +27924,8 @@
           },
           "display_color": [
             242,
-            242,
             85,
+            128,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28443,9 +28443,9 @@
             }
           },
           "display_color": [
+            127,
             242,
-            36,
-            172,
+            85,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28479,9 +28479,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            148,
+            31,
+            204,
+            146,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28520,9 +28520,9 @@
             }
           },
           "display_color": [
-            36,
-            242,
-            242,
+            204,
+            143,
+            31,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28735,9 +28735,9 @@
             }
           },
           "display_color": [
-            154,
-            242,
-            36,
+            125,
+            31,
+            204,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28776,8 +28776,8 @@
             }
           },
           "display_color": [
-            231,
             85,
+            146,
             242,
             255
           ],
@@ -29450,7 +29450,7 @@
             255
           ],
           "name": "NewTrail3",
-          "size": 9,
+          "size": 6,
           "spawn_groups": []
         },
         "NewTrail4": {

@@ -37,6 +37,7 @@
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/map_mode_ui.hpp"
+#include "devtools/docked_panel_layout_policy.hpp"
 #include "devtools/dev_color_picker.hpp"
 #include "DockManager.hpp"
 #include "devtools/dev_footer_bar.hpp"
@@ -4893,11 +4894,12 @@ void DevControls::apply_header_suppression() {
 
         const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
         const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
-        const bool header_block = modal_hide || shift_block_headers_footers_;
+        const bool docked_panel_open = devmode::docked_panels::any_qualifying_panel_open();
+        const bool header_block = modal_hide || shift_block_headers_footers_ || docked_panel_open;
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(false);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool footer_enabled = !shift_block_headers_footers_;
+            const bool footer_enabled = !shift_block_headers_footers_ && !docked_panel_open;
             footer->set_visible(footer_enabled);
             footer->set_input_enabled(footer_enabled);
         }
@@ -4924,9 +4926,10 @@ void DevControls::mark_layout_dirty() {
 void DevControls::update_header_and_footer_bounds() {
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
     const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
+    const bool docked_panel_open = devmode::docked_panels::any_qualifying_panel_open();
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool hide_headers = modal_hide || layers_panel_open || shift_block_headers_footers_;
+    const bool hide_headers = modal_hide || layers_panel_open || shift_block_headers_footers_ || docked_panel_open;
     if (hide_headers) {
         last_header_rect_ = SDL_Rect{0, 0, 0, 0};
     } else {
@@ -4934,7 +4937,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible() && !shift_block_headers_footers_) {
+            if (footer->visible() && !shift_block_headers_footers_ && !docked_panel_open) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};

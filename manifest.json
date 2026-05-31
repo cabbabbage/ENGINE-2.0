@@ -27516,7 +27516,7 @@
         "lens_alpha_clamp_protection": false,
         "lens_alpha_debug_mode": 0,
         "lens_anamorphic_strength": 0.8499999642372131,
-        "lens_barrel_distortion": 0.030000030994415283,
+        "lens_barrel_distortion": 0.01900005340576172,
         "lens_bloom_radius": 0.0,
         "lens_bloom_strength": 0.0,
         "lens_bloom_threshold": 1.0,
@@ -27526,7 +27526,7 @@
         "lens_chromatic_aberration": 0.10000000149011612,
         "lens_chromatic_depth_influence": 0.14000000059604645,
         "lens_chromatic_edge_start": 0.6200000047683716,
-        "lens_distortion_zoom_compensation": 0.9650000333786011,
+        "lens_distortion_zoom_compensation": 0.9750000238418579,
         "lens_downsample_scale": 0.8100000023841858,
         "lens_edge_softness": 0.04999999701976776,
         "lens_field_curvature": -2.8600001335144043,
@@ -27743,9 +27743,9 @@
             }
           },
           "display_color": [
+            120,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28263,9 +28263,9 @@
             }
           },
           "display_color": [
+            113,
             204,
             31,
-            147,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28299,8 +28299,8 @@
             }
           },
           "display_color": [
-            126,
             85,
+            242,
             242,
             255
           ],
@@ -28341,8 +28341,8 @@
           },
           "display_color": [
             31,
+            45,
             204,
-            146,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28555,9 +28555,9 @@
             }
           },
           "display_color": [
-            204,
-            137,
-            71,
+            199,
+            85,
+            242,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28596,9 +28596,9 @@
             }
           },
           "display_color": [
-            36,
-            143,
             242,
+            36,
+            36,
             255
           ],
           "inherit_map_floor_color": false,

@@ -27743,9 +27743,9 @@
             }
           },
           "display_color": [
-            85,
-            171,
+            152,
             242,
+            85,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28263,9 +28263,9 @@
             }
           },
           "display_color": [
-            174,
-            242,
-            36,
+            31,
+            103,
+            204,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28300,7 +28300,7 @@
           },
           "display_color": [
             242,
-            85,
+            36,
             242,
             255
           ],
@@ -28340,9 +28340,9 @@
             }
           },
           "display_color": [
-            149,
-            85,
             242,
+            239,
+            36,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28555,9 +28555,9 @@
             }
           },
           "display_color": [
-            31,
-            107,
-            204,
+            85,
+            242,
+            157,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28596,9 +28596,9 @@
             }
           },
           "display_color": [
-            36,
+            85,
+            154,
             242,
-            216,
             255
           ],
           "inherit_map_floor_color": false,

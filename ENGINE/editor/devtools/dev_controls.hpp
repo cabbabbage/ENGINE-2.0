@@ -59,6 +59,11 @@ public:
         PngFolder
     };
 
+private:
+    enum class RightDockedPanel : std::uint8_t;
+
+public:
+
     DevControls(Assets* owner, int screen_w, int screen_h);
     ~DevControls();
 
@@ -291,6 +296,13 @@ public:
     void rebuild_layout_state();
     void update_header_and_footer_bounds();
     void ensure_layout_cache();
+    SDL_Rect right_docked_panel_bounds() const;
+    void set_active_right_docked_panel(RightDockedPanel panel);
+    RightDockedPanel detect_active_right_docked_panel() const;
+    bool is_right_docked_panel_visible(RightDockedPanel panel) const;
+    void open_right_docked_panel(RightDockedPanel panel);
+    void close_right_docked_panel(RightDockedPanel panel);
+    void close_all_right_docked_panels(std::optional<RightDockedPanel> except = std::nullopt);
     void mark_dirty(std::uint32_t flags);
     bool has_dirty(std::uint32_t flags) const;
     void clear_dirty(std::uint32_t flags);
@@ -343,6 +355,16 @@ private:
     enum class DirtyFlag : std::uint32_t {
         None   = 0,
         Layout = 1 << 0,
+    };
+    enum class RightDockedPanel : std::uint8_t {
+        None,
+        Camera,
+        Lens,
+        SceneEffects,
+        RoomConfig,
+        TrailConfig,
+        EdgeDetails,
+        MiscOptions,
     };
 
     static constexpr std::uint32_t kDirtyLayout = static_cast<std::uint32_t>(DirtyFlag::Layout);
@@ -446,6 +468,7 @@ private:
 
     bool render_suppression_in_progress_ = false;
     bool shift_block_headers_footers_ = false;
+    RightDockedPanel active_right_docked_panel_ = RightDockedPanel::None;
 
     std::uint32_t dirty_flags_ = kDirtyLayout;
     LayoutCache layout_cache_;

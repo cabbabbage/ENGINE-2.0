@@ -27619,7 +27619,7 @@
             "name": "stump"
           }
         ],
-        "resolution": 8
+        "resolution": 6
       },
       "live_dynamic_spawns": {
         "boundary_area_selectors": [
@@ -27743,8 +27743,8 @@
             }
           },
           "display_color": [
-            120,
-            36,
+            85,
+            171,
             242,
             255
           ],
@@ -28263,9 +28263,9 @@
             }
           },
           "display_color": [
-            113,
-            204,
-            31,
+            174,
+            242,
+            36,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28299,8 +28299,8 @@
             }
           },
           "display_color": [
-            85,
             242,
+            85,
             242,
             255
           ],
@@ -28340,9 +28340,9 @@
             }
           },
           "display_color": [
-            31,
-            45,
-            204,
+            149,
+            85,
+            242,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28555,9 +28555,9 @@
             }
           },
           "display_color": [
-            199,
-            85,
-            242,
+            31,
+            107,
+            204,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28596,9 +28596,9 @@
             }
           },
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            216,
             255
           ],
           "inherit_map_floor_color": false,

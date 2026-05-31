@@ -541,15 +541,7 @@ void CameraUIPanel::configure_container() {
     });
     container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
         (void)input;
-        SDL_Rect usable = DockManager::instance().usableRect();
-        if (usable.w > 0 && usable.h > 0) {
-            int panel_x = screen_w - std::max(screen_w / 3, 320);
-            panel_x = std::clamp(panel_x, 0, screen_w);
-            const int panel_w = std::max(0, screen_w - panel_x);
-            container_.set_panel_bounds_override(SDL_Rect{panel_x, usable.y, panel_w, usable.h});
-        } else {
-            container_.clear_panel_bounds_override();
-        }
+        container_.set_panel_bounds_override(devmode::docked_panels::default_right_docked_bounds(screen_w, screen_h));
         for (DockableCollapsible* panel : ordered_section_panels_) {
             if (panel) {
                 panel->update(input, screen_w, screen_h);

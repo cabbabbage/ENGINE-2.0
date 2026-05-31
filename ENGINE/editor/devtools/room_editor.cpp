@@ -6691,6 +6691,9 @@ void RoomEditor::open_edge_detail_candidates() {
         edge_detail_candidates_modal_ = std::make_unique<EdgeDetailCandidatesModal>();
     }
     edge_detail_candidates_modal_->set_screen_dimensions(screen_w_, screen_h_);
+    if (edge_detail_panel_bounds_.w > 0 && edge_detail_panel_bounds_.h > 0) {
+        edge_detail_candidates_modal_->set_docked_bounds(edge_detail_panel_bounds_);
+    }
     edge_detail_candidates_modal_->set_manifest_store(manifest_store_);
     edge_detail_candidates_modal_->set_assets(assets_);
     edge_detail_candidates_modal_->open(assets_->map_info_json(), [this]() {
@@ -6712,6 +6715,17 @@ void RoomEditor::close_edge_detail_candidates() {
 
 bool RoomEditor::is_edge_detail_candidates_open() const {
     return edge_detail_candidates_modal_ && edge_detail_candidates_modal_->visible();
+}
+
+void RoomEditor::set_edge_detail_panel_bounds(const SDL_Rect& bounds) {
+    edge_detail_panel_bounds_ = bounds;
+    if (edge_detail_candidates_modal_) {
+        if (bounds.w > 0 && bounds.h > 0) {
+            edge_detail_candidates_modal_->set_docked_bounds(bounds);
+        } else {
+            edge_detail_candidates_modal_->clear_docked_bounds();
+        }
+    }
 }
 
 bool RoomEditor::is_camera_settings_open() const {
@@ -25900,16 +25914,7 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 }
 
 void RoomEditor::update_room_config_bounds() {
-    constexpr int kPanelWidth = 420;
-    constexpr int kMargin = 12;
-    SDL_Rect usable = SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
-    const int panel_w = std::min(std::max(320, kPanelWidth), std::max(320, screen_w_ - (kMargin * 2)));
-    room_config_bounds_ = SDL_Rect{
-        std::max(kMargin, screen_w_ - panel_w - kMargin),
-        0,
-        panel_w,
-        std::max(0, usable.h)
-    };
+    room_config_bounds_ = devmode::docked_panels::default_right_docked_bounds(screen_w_, screen_h_);
 }
 
 void RoomEditor::configure_shared_panel() {

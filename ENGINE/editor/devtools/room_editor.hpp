@@ -147,6 +147,7 @@ public:
     void toggle_edge_detail_candidates();
     void open_edge_detail_candidates();
     void close_edge_detail_candidates();
+    void set_edge_detail_panel_bounds(const SDL_Rect& bounds);
     bool is_edge_detail_candidates_open() const;
     void create_room_from_footer();
     // Seeds a trail template for orthogonal centerline corridor generation (90° turns only).
@@ -1319,6 +1320,7 @@ private:
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     std::unique_ptr<EdgeDetailCandidatesModal> edge_detail_candidates_modal_;
+    SDL_Rect edge_detail_panel_bounds_{0, 0, 0, 0};
     SDL_Rect room_config_bounds_{0, 0, 0, 0};
     std::unique_ptr<SlidingWindowContainer> spawn_group_container_;
     mutable SDL_Rect spawn_group_panel_embedded_bounds_{0, 0, 0, 0};

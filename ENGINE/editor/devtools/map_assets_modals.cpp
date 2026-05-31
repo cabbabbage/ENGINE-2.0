@@ -1915,10 +1915,14 @@ void EdgeDetailCandidatesModal::open(json& map_info, SaveCallback on_save) {
     panel_->set_on_close([this]() {
         if (on_close_) on_close_();
     });
+    panel_->set_floatable(false);
+    panel_->set_close_button_on_left(false);
+    panel_->set_close_button_enabled(true);
 
     panel_->open();
     panel_->force_pointer_ready();
     position_initialized_ = false;
+    apply_docked_bounds();
     ensure_visible_position();
 }
 
@@ -1931,7 +1935,10 @@ bool EdgeDetailCandidatesModal::visible() const {
 }
 
 void EdgeDetailCandidatesModal::update(const Input& input) {
-    if (panel_) panel_->update(input, screen_w_, screen_h_);
+    if (panel_) {
+        apply_docked_bounds();
+        panel_->update(input, screen_w_, screen_h_);
+    }
 }
 
 bool EdgeDetailCandidatesModal::handle_event(const SDL_Event& e) {
@@ -1952,6 +1959,7 @@ void EdgeDetailCandidatesModal::set_screen_dimensions(int width, int height) {
     screen_w_ = std::max(width, 0);
     screen_h_ = std::max(height, 0);
     if (panel_) panel_->set_screen_dimensions(screen_w_, screen_h_);
+    apply_docked_bounds();
     position_initialized_ = false;
     ensure_visible_position();
 }
@@ -1966,8 +1974,34 @@ void EdgeDetailCandidatesModal::set_assets(Assets* assets) {
     if (panel_) panel_->set_assets(assets_);
 }
 
+void EdgeDetailCandidatesModal::set_docked_bounds(const SDL_Rect& bounds) {
+    docked_bounds_ = bounds;
+    docked_bounds_active_ = bounds.w > 0 && bounds.h > 0;
+    apply_docked_bounds();
+}
+
+void EdgeDetailCandidatesModal::clear_docked_bounds() {
+    docked_bounds_active_ = false;
+    docked_bounds_ = SDL_Rect{0, 0, 0, 0};
+}
+
+void EdgeDetailCandidatesModal::apply_docked_bounds() {
+    if (!panel_ || !docked_bounds_active_) {
+        return;
+    }
+    panel_->set_work_area(SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)});
+    panel_->set_available_height_override(std::max(0, docked_bounds_.h));
+    panel_->set_visible_height(std::max(0, docked_bounds_.h));
+    panel_->set_rect(docked_bounds_);
+}
+
 void EdgeDetailCandidatesModal::ensure_visible_position() {
     if (!panel_) return;
+    if (docked_bounds_active_) {
+        apply_docked_bounds();
+        position_initialized_ = true;
+        return;
+    }
     if (position_initialized_) return;
 
     panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});

@@ -1714,7 +1714,8 @@ void DevControls::layout_misc_options_panel() {
     }
     ensure_misc_options_widgets();
 
-    const int panel_w = 360;
+    const SDL_Rect docked = right_docked_panel_bounds();
+    const int panel_w = docked.w;
     const int padding = DMSpacing::panel_padding();
     const int gap = DMSpacing::item_gap();
     const int content_w = std::max(0, panel_w - padding * 2);
@@ -1723,9 +1724,9 @@ void DevControls::layout_misc_options_panel() {
     const int color_h = DMButton::height();
     const int delete_h = DMButton::height();
     const int preview_h = 26;
-    const int panel_h = std::max(220, screen_h_ - 120);
-    const int x = std::max(0, screen_w_ - panel_w - 8);
-    const int y = 56;
+    const int panel_h = std::max(0, docked.h);
+    const int x = docked.x;
+    const int y = docked.y;
     misc_options_panel_rect_ = SDL_Rect{x, y, panel_w, panel_h};
 
     int cursor_y = y + padding + label_h + gap;
@@ -1875,17 +1876,25 @@ void DevControls::delete_current_map_and_exit_to_start_menu() {
 
 void DevControls::open_misc_options_panel() {
     if (misc_options_panel_open_) {
+        set_active_right_docked_panel(RightDockedPanel::MiscOptions);
+        apply_header_suppression();
         return;
     }
     ensure_misc_options_widgets();
     sync_misc_options_from_map_info();
     misc_options_panel_open_ = true;
+    set_active_right_docked_panel(RightDockedPanel::MiscOptions);
+    apply_header_suppression();
     mark_layout_dirty();
     sync_header_button_states();
 }
 
 void DevControls::close_misc_options_panel() {
     if (!misc_options_panel_open_) {
+        if (active_right_docked_panel_ == RightDockedPanel::MiscOptions) {
+            set_active_right_docked_panel(detect_active_right_docked_panel());
+            apply_header_suppression();
+        }
         return;
     }
     if (misc_map_color_dirty_) {
@@ -1899,20 +1908,200 @@ void DevControls::close_misc_options_panel() {
     }
     misc_options_panel_open_ = false;
     misc_options_panel_rect_ = SDL_Rect{0, 0, 0, 0};
+    set_active_right_docked_panel(detect_active_right_docked_panel());
+    apply_header_suppression();
     mark_layout_dirty();
     sync_header_button_states();
 }
 
 void DevControls::toggle_misc_options_panel() {
-    if (misc_options_panel_open_) {
-        close_misc_options_panel();
+    if (is_right_docked_panel_visible(RightDockedPanel::MiscOptions)) {
+        close_right_docked_panel(RightDockedPanel::MiscOptions);
     } else {
-        open_misc_options_panel();
+        open_right_docked_panel(RightDockedPanel::MiscOptions);
     }
 }
 
 bool DevControls::is_misc_options_panel_open() const {
     return misc_options_panel_open_;
+}
+
+SDL_Rect DevControls::right_docked_panel_bounds() const {
+    return devmode::docked_panels::default_right_docked_bounds(screen_w_, screen_h_);
+}
+
+void DevControls::set_active_right_docked_panel(RightDockedPanel panel) {
+    active_right_docked_panel_ = panel;
+    devmode::docked_panels::set_qualifying_panel_open(
+        "dev_controls_right_docked",
+        active_right_docked_panel_ != RightDockedPanel::None);
+}
+
+bool DevControls::is_right_docked_panel_visible(RightDockedPanel panel) const {
+    switch (panel) {
+        case RightDockedPanel::Camera:
+            return camera_panel_ && camera_panel_->is_visible();
+        case RightDockedPanel::Lens:
+            return lens_panel_ && lens_panel_->is_visible();
+        case RightDockedPanel::SceneEffects:
+            return scene_effects_panel_ && scene_effects_panel_->is_visible();
+        case RightDockedPanel::RoomConfig:
+        case RightDockedPanel::TrailConfig:
+            return room_editor_ && room_editor_->is_room_config_open();
+        case RightDockedPanel::EdgeDetails:
+            return room_editor_ && room_editor_->is_edge_detail_candidates_open();
+        case RightDockedPanel::MiscOptions:
+            return misc_options_panel_open_;
+        case RightDockedPanel::None:
+        default:
+            return false;
+    }
+}
+
+DevControls::RightDockedPanel DevControls::detect_active_right_docked_panel() const {
+    if (camera_panel_ && camera_panel_->is_visible()) return RightDockedPanel::Camera;
+    if (lens_panel_ && lens_panel_->is_visible()) return RightDockedPanel::Lens;
+    if (scene_effects_panel_ && scene_effects_panel_->is_visible()) return RightDockedPanel::SceneEffects;
+    if (room_editor_ && room_editor_->is_room_config_open()) {
+        if (active_right_docked_panel_ == RightDockedPanel::TrailConfig) {
+            return RightDockedPanel::TrailConfig;
+        }
+        return RightDockedPanel::RoomConfig;
+    }
+    if (room_editor_ && room_editor_->is_edge_detail_candidates_open()) return RightDockedPanel::EdgeDetails;
+    if (misc_options_panel_open_) return RightDockedPanel::MiscOptions;
+    return RightDockedPanel::None;
+}
+
+void DevControls::close_all_right_docked_panels(std::optional<RightDockedPanel> except) {
+    auto should_close = [&](RightDockedPanel panel) {
+        return !except.has_value() || (*except != panel);
+    };
+
+    if (should_close(RightDockedPanel::Camera) && camera_panel_) camera_panel_->close();
+    if (should_close(RightDockedPanel::Lens) && lens_panel_) lens_panel_->close();
+    if (should_close(RightDockedPanel::SceneEffects) && scene_effects_panel_) scene_effects_panel_->close();
+
+    if (room_editor_) {
+        if (should_close(RightDockedPanel::RoomConfig) && should_close(RightDockedPanel::TrailConfig)) {
+            room_editor_->close_room_config();
+        }
+        if (should_close(RightDockedPanel::EdgeDetails)) {
+            room_editor_->close_edge_detail_candidates();
+        }
+    }
+
+    if (should_close(RightDockedPanel::MiscOptions) && misc_options_panel_open_) {
+        close_misc_options_panel();
+    }
+}
+
+void DevControls::open_right_docked_panel(RightDockedPanel panel) {
+    if (panel == RightDockedPanel::None) {
+        close_all_right_docked_panels(std::nullopt);
+        set_active_right_docked_panel(RightDockedPanel::None);
+        apply_header_suppression();
+        sync_header_button_states();
+        return;
+    }
+
+    if (is_modal_blocking_panels()) {
+        pulse_modal_header();
+        sync_header_button_states();
+        return;
+    }
+
+    if (active_right_docked_panel_ == panel && is_right_docked_panel_visible(panel)) {
+        apply_header_suppression();
+        sync_header_button_states();
+        return;
+    }
+
+    close_all_right_docked_panels(panel);
+    close_misc_options_panel();
+
+    switch (panel) {
+        case RightDockedPanel::Camera:
+            if (camera_panel_) {
+                camera_panel_->set_assets(assets_);
+                camera_panel_->open();
+            }
+            break;
+        case RightDockedPanel::Lens:
+            if (lens_panel_) {
+                lens_panel_->set_assets(assets_);
+                lens_panel_->open();
+            }
+            break;
+        case RightDockedPanel::SceneEffects:
+            if (scene_effects_panel_) {
+                scene_effects_panel_->set_assets(assets_);
+                scene_effects_panel_->open();
+            }
+            break;
+        case RightDockedPanel::RoomConfig:
+            if (room_editor_) {
+                room_editor_->open_room_config();
+            }
+            break;
+        case RightDockedPanel::TrailConfig:
+            if (room_editor_) {
+                room_editor_->close_room_config();
+                room_editor_->create_trail_from_footer();
+            }
+            break;
+        case RightDockedPanel::EdgeDetails:
+            if (room_editor_) {
+                room_editor_->set_edge_detail_panel_bounds(right_docked_panel_bounds());
+                room_editor_->open_edge_detail_candidates();
+            }
+            break;
+        case RightDockedPanel::MiscOptions:
+            open_misc_options_panel();
+            break;
+        case RightDockedPanel::None:
+        default:
+            break;
+    }
+
+    set_active_right_docked_panel(is_right_docked_panel_visible(panel) ? panel : detect_active_right_docked_panel());
+    apply_header_suppression();
+    sync_header_button_states();
+}
+
+void DevControls::close_right_docked_panel(RightDockedPanel panel) {
+    switch (panel) {
+        case RightDockedPanel::Camera:
+            if (camera_panel_) camera_panel_->close();
+            break;
+        case RightDockedPanel::Lens:
+            if (lens_panel_) lens_panel_->close();
+            break;
+        case RightDockedPanel::SceneEffects:
+            if (scene_effects_panel_) scene_effects_panel_->close();
+            break;
+        case RightDockedPanel::RoomConfig:
+        case RightDockedPanel::TrailConfig:
+            if (room_editor_) room_editor_->close_room_config();
+            break;
+        case RightDockedPanel::EdgeDetails:
+            if (room_editor_) room_editor_->close_edge_detail_candidates();
+            break;
+        case RightDockedPanel::MiscOptions:
+            close_misc_options_panel();
+            break;
+        case RightDockedPanel::None:
+        default:
+            break;
+    }
+
+    if (active_right_docked_panel_ == panel ||
+        (panel == RightDockedPanel::RoomConfig && active_right_docked_panel_ == RightDockedPanel::TrailConfig) ||
+        (panel == RightDockedPanel::TrailConfig && active_right_docked_panel_ == RightDockedPanel::RoomConfig)) {
+        set_active_right_docked_panel(detect_active_right_docked_panel());
+    }
+    apply_header_suppression();
+    sync_header_button_states();
 }
 
 bool DevControls::layout_dirty() const {
@@ -1951,6 +2140,9 @@ void DevControls::set_screen_dimensions(int width, int height) {
     if (camera_panel_) camera_panel_->set_work_area(bounds);
     if (lens_panel_) lens_panel_->set_work_area(bounds);
     if (scene_effects_panel_) scene_effects_panel_->set_work_area(bounds);
+    if (room_editor_) {
+        room_editor_->set_edge_detail_panel_bounds(right_docked_panel_bounds());
+    }
     
 
     other_settings_.set_screen_dimensions(width, height);
@@ -3605,9 +3797,11 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (layout_rect.w > 0 && layout_rect.h > 0) {
         sliding_rects.push_back(layout_rect);
     }
+    set_active_right_docked_panel(detect_active_right_docked_panel());
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
+    const bool right_docked_open_pre = devmode::docked_panels::any_qualifying_panel_open();
     if (map_mode_ui_) {
         DevFooterBar* footer = map_mode_ui_->get_footer_bar();
         if (footer && footer->visible()) {
@@ -3616,7 +3810,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
     const bool hide_headers_pre =
         modal_hide_pre || layers_panel_open_pre ||
-        asset_editor_tab_active || shift_block_headers_footers_;
+        asset_editor_tab_active || shift_block_headers_footers_ || right_docked_open_pre;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = DockManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -3639,10 +3833,11 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
+    const bool right_docked_open = devmode::docked_panels::any_qualifying_panel_open();
     modal_headers_hidden_ = modal_hide;
     const bool hide_headers =
         modal_hide || layers_panel_open ||
-        asset_editor_tab_active || shift_block_headers_footers_;
+        asset_editor_tab_active || shift_block_headers_footers_ || right_docked_open;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -4427,17 +4622,16 @@ void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetI
 
 void DevControls::toggle_room_config() {
     if (!can_use_room_editor_ui()) return;
-    if (room_editor_) {
-        room_editor_->toggle_room_config();
+    if (is_right_docked_panel_visible(RightDockedPanel::RoomConfig) ||
+        is_right_docked_panel_visible(RightDockedPanel::TrailConfig)) {
+        close_right_docked_panel(RightDockedPanel::RoomConfig);
+    } else {
+        open_right_docked_panel(RightDockedPanel::RoomConfig);
     }
-    sync_header_button_states();
 }
 
 void DevControls::close_room_config() {
-    if (room_editor_) {
-        room_editor_->close_room_config();
-    }
-    sync_header_button_states();
+    close_right_docked_panel(RightDockedPanel::RoomConfig);
 }
 
 bool DevControls::is_room_config_open() const {
@@ -4527,32 +4721,26 @@ double DevControls::get_height_scale_factor() const {
 void DevControls::configure_header_button_sets() {
     if (!map_mode_ui_) return;
 
-    auto make_camera_family_button = [this](const char* id, const char* label, CameraUIPanel* panel, auto toggle_fn) {
+    auto make_camera_family_button = [this](const char* id, const char* label, bool active_now) {
         MapModeUI::HeaderButtonConfig camera_btn;
         camera_btn.id = id;
         camera_btn.label = label;
-        camera_btn.active = panel && panel->is_visible();
+        camera_btn.active = active_now;
         camera_btn.group = FooterButtonGroup::Primary;
         camera_btn.style_override = &DMStyles::HeaderButton();
         camera_btn.active_style_override = &DMStyles::AccentButton();
-        camera_btn.on_toggle = [this, panel, toggle_fn](bool active) {
-            if (room_editor_) {
-                room_editor_->close_room_config();
-            }
-            if (active) {
-                close_misc_options_panel();
-            }
-            if (!panel) {
+        camera_btn.on_toggle = [this, id](bool active) {
+            RightDockedPanel panel_id = RightDockedPanel::None;
+            if (std::string(id) == "camera") panel_id = RightDockedPanel::Camera;
+            else if (std::string(id) == "lens") panel_id = RightDockedPanel::Lens;
+            else if (std::string(id) == "scene_effects") panel_id = RightDockedPanel::SceneEffects;
+            if (panel_id == RightDockedPanel::None) {
                 sync_header_button_states();
                 return;
             }
-            panel->set_assets(assets_);
-            if (panel->is_visible() != active) {
-                (this->*toggle_fn)();
-            } else {
-                sync_header_button_states();
-            }
-};
+            if (active) open_right_docked_panel(panel_id);
+            else close_right_docked_panel(panel_id);
+        };
         return camera_btn;
 };
 
@@ -4598,9 +4786,9 @@ void DevControls::configure_header_button_sets() {
 
     std::vector<MapModeUI::HeaderButtonConfig> room_buttons;
 
-    room_buttons.push_back(make_camera_family_button("camera", "Camera", camera_panel_.get(), &DevControls::toggle_camera_panel));
-    room_buttons.push_back(make_camera_family_button("lens", "Lens", lens_panel_.get(), &DevControls::toggle_lens_panel));
-    room_buttons.push_back(make_camera_family_button("scene_effects", "Scene Effects", scene_effects_panel_.get(), &DevControls::toggle_scene_effects_panel));
+    room_buttons.push_back(make_camera_family_button("camera", "Camera", camera_panel_ && camera_panel_->is_visible()));
+    room_buttons.push_back(make_camera_family_button("lens", "Lens", lens_panel_ && lens_panel_->is_visible()));
+    room_buttons.push_back(make_camera_family_button("scene_effects", "Scene Effects", scene_effects_panel_ && scene_effects_panel_->is_visible()));
     room_buttons.push_back(make_layers_button());
 
     {
@@ -4632,17 +4820,8 @@ void DevControls::configure_header_button_sets() {
     room_config_btn.style_override = &DMStyles::ListButton();
     room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
-        if (!room_editor_) {
-            sync_header_button_states();
-            return;
-        }
-        if (active) {
-            close_misc_options_panel();
-            room_editor_->open_room_config();
-        } else {
-            room_editor_->close_room_config();
-        }
-        sync_header_button_states();
+        if (active) open_right_docked_panel(RightDockedPanel::RoomConfig);
+        else close_right_docked_panel(RightDockedPanel::RoomConfig);
 };
     room_buttons.push_back(std::move(room_config_btn));
 
@@ -4654,17 +4833,8 @@ void DevControls::configure_header_button_sets() {
     edge_details_btn.style_override = &DMStyles::ListButton();
     edge_details_btn.active_style_override = &DMStyles::AccentButton();
     edge_details_btn.on_toggle = [this](bool active) {
-        if (!room_editor_) {
-            sync_header_button_states();
-            return;
-        }
-        if (active) {
-            close_misc_options_panel();
-            room_editor_->open_edge_detail_candidates();
-        } else {
-            room_editor_->close_edge_detail_candidates();
-        }
-        sync_header_button_states();
+        if (active) open_right_docked_panel(RightDockedPanel::EdgeDetails);
+        else close_right_docked_panel(RightDockedPanel::EdgeDetails);
     };
     room_buttons.push_back(std::move(edge_details_btn));
 
@@ -4683,20 +4853,17 @@ void DevControls::configure_header_button_sets() {
     };
     room_buttons.push_back(std::move(create_room_btn));
 
-    MapModeUI::HeaderButtonConfig create_trail_btn;
-    create_trail_btn.id = "create_trail";
-    create_trail_btn.label = "Create Trail";
-    create_trail_btn.momentary = true;
-    create_trail_btn.group = FooterButtonGroup::Actions;
-    create_trail_btn.style_override = &DMStyles::CreateButton();
-    create_trail_btn.active_style_override = &DMStyles::AccentButton();
-    create_trail_btn.on_toggle = [this](bool) {
-        if (room_editor_) {
-            room_editor_->create_trail_from_footer();
-        }
-        sync_header_button_states();
+    MapModeUI::HeaderButtonConfig trail_config_btn;
+    trail_config_btn.id = "trail_config";
+    trail_config_btn.label = "Trail Config";
+    trail_config_btn.group = FooterButtonGroup::Panels;
+    trail_config_btn.style_override = &DMStyles::ListButton();
+    trail_config_btn.active_style_override = &DMStyles::AccentButton();
+    trail_config_btn.on_toggle = [this](bool active) {
+        if (active) open_right_docked_panel(RightDockedPanel::TrailConfig);
+        else close_right_docked_panel(RightDockedPanel::TrailConfig);
     };
-    room_buttons.push_back(std::move(create_trail_btn));
+    room_buttons.push_back(std::move(trail_config_btn));
 
     MapModeUI::HeaderButtonConfig misc_options_btn;
     misc_options_btn.id = "misc_options";
@@ -4706,12 +4873,8 @@ void DevControls::configure_header_button_sets() {
     misc_options_btn.style_override = &DMStyles::ListButton();
     misc_options_btn.active_style_override = &DMStyles::AccentButton();
     misc_options_btn.on_toggle = [this](bool active) {
-        if (active) {
-            open_misc_options_panel();
-        } else {
-            close_misc_options_panel();
-        }
-        sync_header_button_states();
+        if (active) open_right_docked_panel(RightDockedPanel::MiscOptions);
+        else close_right_docked_panel(RightDockedPanel::MiscOptions);
     };
     room_buttons.push_back(std::move(misc_options_btn));
 
@@ -4784,9 +4947,13 @@ void DevControls::sync_header_button_states() {
         }
         return;
     }
+    set_active_right_docked_panel(detect_active_right_docked_panel());
     const bool room_config_open = room_editor_ && room_editor_->is_room_config_open();
     const bool edge_details_open = room_editor_ && room_editor_->is_edge_detail_candidates_open();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "room_config", room_config_open);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room,
+                                   "trail_config",
+                                   active_right_docked_panel_ == RightDockedPanel::TrailConfig && room_config_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "edge_details", edge_details_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "misc_options", is_misc_options_panel_open());
     const bool library_open = room_editor_ && room_editor_->is_asset_library_open();
@@ -4802,7 +4969,6 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_room", false);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
     const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_boundary", boundary_open);
@@ -4855,11 +5021,9 @@ void DevControls::close_all_floating_panels() {
     if (room_editor_) {
         room_editor_->close_asset_library();
         room_editor_->close_asset_info_editor();
-        room_editor_->close_edge_detail_candidates();
     }
-    if (camera_panel_) camera_panel_->close();
-    if (lens_panel_) lens_panel_->close();
-    if (scene_effects_panel_) scene_effects_panel_->close();
+    close_all_right_docked_panels(std::nullopt);
+    set_active_right_docked_panel(RightDockedPanel::None);
     if (map_mode_ui_) {
         map_mode_ui_->close_all_panels();
     }
@@ -4868,11 +5032,10 @@ void DevControls::close_all_floating_panels() {
         boundary_assets_modal_->close();
     }
     
-    close_misc_options_panel();
-    
     if (regenerate_popup_) {
         regenerate_popup_->close();
     }
+    apply_header_suppression();
     sync_header_button_states();
 }
 
@@ -4891,6 +5054,7 @@ void DevControls::pulse_modal_header() {
 
 void DevControls::apply_header_suppression() {
     if (map_mode_ui_) {
+        set_active_right_docked_panel(detect_active_right_docked_panel());
 
         const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
         const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
@@ -5275,65 +5439,33 @@ void DevControls::open_regenerate_room_popup() {
 }
 
 void DevControls::toggle_camera_panel() {
-    if (!camera_panel_) {
-        return;
-    }
-    camera_panel_->set_assets(assets_);
-    if (camera_panel_->is_visible()) {
-        camera_panel_->close();
+    if (is_right_docked_panel_visible(RightDockedPanel::Camera)) {
+        close_right_docked_panel(RightDockedPanel::Camera);
     } else {
-        if (is_modal_blocking_panels()) {
-            pulse_modal_header();
-            sync_header_button_states();
-            return;
-        }
-        if (lens_panel_) lens_panel_->close();
-        if (scene_effects_panel_) scene_effects_panel_->close();
-        camera_panel_->open();
+        open_right_docked_panel(RightDockedPanel::Camera);
     }
-    sync_header_button_states();
 }
 
 void DevControls::toggle_lens_panel() {
-    if (!lens_panel_) return;
-    lens_panel_->set_assets(assets_);
-    if (lens_panel_->is_visible()) {
-        lens_panel_->close();
+    if (is_right_docked_panel_visible(RightDockedPanel::Lens)) {
+        close_right_docked_panel(RightDockedPanel::Lens);
     } else {
-        if (is_modal_blocking_panels()) {
-            pulse_modal_header();
-            sync_header_button_states();
-            return;
-        }
-        if (camera_panel_) camera_panel_->close();
-        if (scene_effects_panel_) scene_effects_panel_->close();
-        lens_panel_->open();
+        open_right_docked_panel(RightDockedPanel::Lens);
     }
-    sync_header_button_states();
 }
 
 void DevControls::toggle_scene_effects_panel() {
-    if (!scene_effects_panel_) return;
-    scene_effects_panel_->set_assets(assets_);
-    if (scene_effects_panel_->is_visible()) {
-        scene_effects_panel_->close();
+    if (is_right_docked_panel_visible(RightDockedPanel::SceneEffects)) {
+        close_right_docked_panel(RightDockedPanel::SceneEffects);
     } else {
-        if (is_modal_blocking_panels()) {
-            pulse_modal_header();
-            sync_header_button_states();
-            return;
-        }
-        if (camera_panel_) camera_panel_->close();
-        if (lens_panel_) lens_panel_->close();
-        scene_effects_panel_->open();
+        open_right_docked_panel(RightDockedPanel::SceneEffects);
     }
-    sync_header_button_states();
 }
 
 void DevControls::close_camera_panel() {
-    if (camera_panel_) camera_panel_->close();
-    if (lens_panel_) lens_panel_->close();
-    if (scene_effects_panel_) scene_effects_panel_->close();
+    close_right_docked_panel(RightDockedPanel::Camera);
+    close_right_docked_panel(RightDockedPanel::Lens);
+    close_right_docked_panel(RightDockedPanel::SceneEffects);
 }
 
 bool DevControls::can_use_room_editor_ui() const {

@@ -43,6 +43,13 @@ SDL_Rect apply_layout_policy(const SDL_Rect& rect,
     return out;
 }
 
+SDL_Rect default_right_docked_bounds(int screen_w, int screen_h) {
+    const int width_floor = 320;
+    const int panel_w = std::clamp(std::max(screen_w / 3, width_floor), 0, std::max(0, screen_w));
+    const int panel_x = std::max(0, screen_w - panel_w);
+    return SDL_Rect{panel_x, 0, panel_w, std::max(0, screen_h)};
+}
+
 void set_qualifying_panel_open(const char* source, bool open) {
     if (!source || *source == '\0') {
         return;
@@ -60,4 +67,3 @@ bool any_qualifying_panel_open() {
 }
 
 } // namespace devmode::docked_panels
-

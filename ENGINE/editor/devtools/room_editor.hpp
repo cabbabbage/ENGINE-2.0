@@ -48,7 +48,6 @@ namespace vibble::grid {
 class Occupancy;
 class Grid;
 }
-class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
 class RoomOvalToolsPanel;
@@ -619,6 +618,20 @@ private:
     bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_impassable_box_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_asset_preview_animation_and_frame(Asset* target, const std::string& animation_id, int frame_index);
+    bool resolve_active_frame_edit_context(Asset*& out_target,
+                                           std::shared_ptr<AssetInfo>& out_info,
+                                           std::string& out_animation_id,
+                                           int& out_current_frame_index) const;
+    std::optional<std::string> active_frame_edit_disabled_reason(const Asset* target,
+                                                                 const std::string& animation_id) const;
+    std::vector<int> sanitize_footer_selected_frames(int frame_count, int fallback_frame) const;
+    bool flush_active_frame_edit_state();
+    bool apply_active_subview_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool delete_active_preview_frames(const std::vector<int>& selected_frames);
+    bool duplicate_active_preview_frames(const std::vector<int>& selected_frames);
+    bool reorder_active_preview_frames(const std::vector<int>& selected_frames, int insertion_index);
+    bool insert_active_preview_frame(int insertion_index);
+    bool replace_active_preview_frame(int frame_index);
     bool delete_asset_info_preview_frames();
     bool duplicate_asset_info_preview_frames();
     bool reorder_asset_info_preview_frames(int from_frame, int insertion_index);
@@ -1009,7 +1022,6 @@ private:
     std::unique_ptr<RoomBoxToolsPanel> impassable_box_tools_panel_;
     std::unique_ptr<RoomFloorBoxToolsPanel> floor_box_tools_panel_;
     std::unique_ptr<devmode::room_config::AttackPayloadEditor> attack_payload_editor_;
-    std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
     std::unique_ptr<animation_editor::AnimationListPanel> stack_animation_list_panel_;
     std::shared_ptr<animation_editor::AnimationDocument> stack_animation_preview_document_;
     std::shared_ptr<animation_editor::PreviewProvider> stack_animation_preview_provider_;

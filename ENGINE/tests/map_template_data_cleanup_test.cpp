@@ -76,6 +76,7 @@ int main() {
     }
     assert(found_merged_mushroom);
     assert(room.contains("size"));
+    assert(room.value("size", -1) == 9);
     assert(!room.contains("geometry"));
     assert(!room.contains("width"));
     assert(!room.contains("height"));
@@ -86,6 +87,7 @@ int main() {
     const auto& trail = normalized["trails_data"]["MainTrail_Trail"];
     assert(trail.value("name", std::string{}) == "MainTrail_Trail");
     assert(trail.contains("size"));
+    assert(trail.value("size", -1) == 5);
     assert(!trail.contains("geometry"));
     assert(!trail.contains("width"));
     assert(!trail.contains("height"));

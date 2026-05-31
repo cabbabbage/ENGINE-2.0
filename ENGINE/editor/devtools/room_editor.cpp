@@ -3746,14 +3746,6 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
             }
         }
 
-        if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
-            if (anchor_navigation_panel_->handle_event(event)) {
-                result.handled = true;
-                result.pointer_blocked = true;
-            } else if (pointer_based && anchor_navigation_panel_->is_point_inside(mx, my)) {
-                result.pointer_blocked = true;
-            }
-        }
         return result;
     };
 
@@ -6094,9 +6086,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
         }
         if (showing_stack_animation_delete_popup_) {
             render_stack_animation_delete_modal(renderer);
-        }
-        if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible()) {
-            anchor_navigation_panel_->render(renderer);
         }
         if (anchor_mode_active() && anchor_tools_panel_ && anchor_tools_panel_->is_visible()) {
             anchor_tools_panel_->render(renderer);
@@ -9697,8 +9686,16 @@ void RoomEditor::mark_geometry_dirty(Room* room) {
 bool RoomEditor::regenerate_geometry(Room* room) {
     if (!room || !room->room_area || !assets_) return false;
     auto& root = room->assets_data();
-    int size = root.value("size", 9);
-    size = std::clamp(size, 7, 20);
+    const bool is_trail = room && vibble::strings::to_lower_copy(room->type) == "trail";
+    const int default_size = is_trail ? 5 : 9;
+    const int min_size = is_trail ? 5 : 7;
+    const int max_size = is_trail ? 10 : 20;
+    int size = root.value("size", default_size);
+    if (is_trail && (size < min_size || size > max_size)) {
+        size = default_size;
+    } else {
+        size = std::clamp(size, min_size, max_size);
+    }
     const SDL_Point center = room->room_area->get_center();
     const int radius = size * vibble::grid::delta(size);
     const int map_w = std::max(1, std::abs(center.x) * 2 + radius * 8);
@@ -10466,9 +10463,6 @@ devmode::FileSourcedAnimationSelection RoomEditor::resolve_file_sourced_animatio
 }
 
 void RoomEditor::ensure_anchor_editor_widgets() {
-    if (!anchor_navigation_panel_) {
-        anchor_navigation_panel_ = std::make_unique<BottomNavigationPanel>();
-    }
     if (!anchor_tools_panel_) {
         anchor_tools_panel_ = std::make_unique<RoomAnchorToolsPanel>();
         anchor_tools_panel_->set_on_select([this](const std::string& name) {
@@ -13417,12 +13411,6 @@ void RoomEditor::update_asset_editor_layout() {
     ensure_stack_animation_list_panel();
 
     apply_asset_editor_panel_overrides();
-    if (anchor_navigation_panel_) {
-        anchor_navigation_panel_->set_screen_dimensions(screen_w_, screen_h_);
-        anchor_navigation_panel_->set_visible(false);
-        anchor_navigation_panel_->clear_navigation();
-    }
-
     sync_shared_footer_navigation();
     ++stack_animation_sync_frames_;
     StackAnimationListSyncKey next_sync_key;
@@ -21944,10 +21932,6 @@ bool RoomEditor::is_movement_ui_blocking_point(int x, int y) const {
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
-        return true;
-    }
     if (movement_mode_active() && movement_tools_panel_ && movement_tools_panel_->is_visible() &&
         movement_tools_panel_->is_point_inside(x, y)) {
         return true;
@@ -21963,10 +21947,6 @@ bool RoomEditor::is_oval_ui_blocking_point(int x, int y) const {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
-        return true;
-    }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
     }
     if (oval_mode_active() && oval_tools_panel_ && oval_tools_panel_->is_visible() &&
@@ -21998,10 +21978,6 @@ bool RoomEditor::is_hitbox_ui_blocking_point(int x, int y) const {
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
-        return true;
-    }
     if (hitbox_mode_active() && hitbox_tools_panel_ && hitbox_tools_panel_->is_visible() &&
         hitbox_tools_panel_->is_point_inside(x, y)) {
         return true;
@@ -22017,10 +21993,6 @@ bool RoomEditor::is_attack_box_ui_blocking_point(int x, int y) const {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
-        return true;
-    }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
     }
     if (attack_box_mode_active() && attack_box_tools_panel_ && attack_box_tools_panel_->is_visible() &&
@@ -22044,10 +22016,6 @@ bool RoomEditor::is_impassable_box_ui_blocking_point(int x, int y) const {
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
         return true;
     }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
-        return true;
-    }
     if (impassable_box_mode_active() && impassable_box_tools_panel_ && impassable_box_tools_panel_->is_visible() &&
         impassable_box_tools_panel_->is_point_inside(x, y)) {
         return true;
@@ -22063,10 +22031,6 @@ bool RoomEditor::is_floor_box_ui_blocking_point(int x, int y) const {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
-        return true;
-    }
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
     }
     if (floor_box_mode_active() && floor_box_tools_panel_ && floor_box_tools_panel_->is_visible() &&
@@ -25051,11 +25015,6 @@ bool RoomEditor::is_anchor_ui_blocking_point(int x, int y) const {
         return true;
     }
     if (shared_footer_bar_ && shared_footer_bar_->visible() && shared_footer_bar_->contains(x, y)) {
-        return true;
-    }
-
-    if (anchor_navigation_panel_ && anchor_navigation_panel_->is_visible() &&
-        anchor_navigation_panel_->is_point_inside(x, y)) {
         return true;
     }
 

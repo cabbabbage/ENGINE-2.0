@@ -513,7 +513,7 @@ Room::Room(Point origin,
             size);
 
         if (room_area) {
-            room_area->set_type("room");
+            room_area->set_type(type.empty() ? "room" : type);
         }
     }
 

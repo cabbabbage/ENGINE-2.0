@@ -12,6 +12,7 @@
 #include "widgets.hpp"
 #include "utils/input.hpp"
 #include "DockManager.hpp"
+#include "docked_panel_layout_policy.hpp"
 
 namespace {
 constexpr int kScrollbarWidth = 10;
@@ -149,6 +150,14 @@ void SlidingWindowContainer::set_panel_bounds_override(const SDL_Rect& bounds) {
 void SlidingWindowContainer::clear_panel_bounds_override() {
     panel_override_active_ = false;
     panel_override_ = SDL_Rect{0, 0, 0, 0};
+    layout_dirty_ = true;
+}
+
+void SlidingWindowContainer::set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy policy) {
+    if (docked_layout_policy_ == policy) {
+        return;
+    }
+    docked_layout_policy_ = policy;
     layout_dirty_ = true;
 }
 
@@ -602,22 +611,18 @@ void SlidingWindowContainer::layout(int screen_w, int screen_h) const {
         if (desired.w == 0 || desired.h == 0) {
             desired = SDL_Rect{0, 0, screen_w, screen_h};
         }
-        if (desired.w > screen_w) desired.w = screen_w;
-        if (desired.h > screen_h) desired.h = screen_h;
-        int max_x = screen_w - desired.w;
-        if (max_x < 0) max_x = 0;
-        desired.x = std::clamp(desired.x, 0, max_x);
-        int max_y = screen_h - desired.h;
-        if (max_y < 0) max_y = 0;
-        desired.y = std::clamp(desired.y, 0, max_y);
-        panel_ = desired;
+        panel_ = devmode::docked_panels::apply_layout_policy(desired, screen_w, screen_h, docked_layout_policy_);
     } else {
         const auto usable = DockManager::instance().usableRect();
         int panel_y = usable.y;
         int panel_h = usable.h > 0 ? usable.h : std::max(0, screen_h - usable.y);
         int panel_x = (screen_w * 2) / 3;
         int panel_w = screen_w - panel_x;
-        panel_ = SDL_Rect{panel_x, panel_y, panel_w, panel_h};
+        panel_ = devmode::docked_panels::apply_layout_policy(
+            SDL_Rect{panel_x, panel_y, panel_w, panel_h},
+            screen_w,
+            screen_h,
+            docked_layout_policy_);
     }
 
     const int padding = DMSpacing::panel_padding();

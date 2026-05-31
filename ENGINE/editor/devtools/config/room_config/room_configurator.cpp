@@ -17,6 +17,7 @@
 #include "font_cache.hpp"
 #include "dev_mode_color_utils.hpp"
 #include "gameplay/spawn/spawn_group_codec.hpp"
+#include "devtools/docked_panel_layout_policy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1164,6 +1165,7 @@ SlidingWindowContainer* RoomConfigurator::container() { return container_; }
 const SlidingWindowContainer* RoomConfigurator::container() const { return container_; }
 
 void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
+    container.set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy::FullHeightDefault);
     container.set_header_text_provider([this]() { return this->current_header_text(); });
     const bool can_generate_live_room = (room_ != nullptr) && !is_trail_context_ && !room_metadata_only_mode_;
     if (can_generate_live_room && on_generate_room_) {

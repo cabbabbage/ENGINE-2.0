@@ -415,6 +415,7 @@ private:
     void regenerate_current_room();
     void configure_shared_panel();
     void refresh_room_config_visibility();
+    void refresh_docked_panel_open_state();
     void sanitize_perimeter_spawn_groups();
     bool sanitize_perimeter_spawn_groups(nlohmann::json& groups);
     std::optional<PerimeterOverlay> compute_perimeter_overlay_for_drag();

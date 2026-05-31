@@ -50,6 +50,7 @@
 #include "config/room_config/attack_payload_editor.hpp"
 #include "DockManager.hpp"
 #include "SlidingWindowContainer.hpp"
+#include "docked_panel_layout_policy.hpp"
 #include "devtools/widgets.hpp"
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
@@ -2994,6 +2995,7 @@ void RoomEditor::set_room_config_visible(bool visible) {
     if (!room_cfg_ui_) {
         room_config_dock_open_ = false;
         room_config_panel_visible_ = false;
+        refresh_docked_panel_open_state();
         return;
     }
     room_config_dock_open_ = visible;
@@ -3009,6 +3011,7 @@ void RoomEditor::set_room_config_visible(bool visible) {
         room_cfg_ui_->close();
     }
     update_spawn_group_config_panel_layout();
+    refresh_docked_panel_open_state();
 }
 
 class ScopedBoolOverride {
@@ -3053,6 +3056,7 @@ void RoomEditor::set_snap_to_grid_enabled(bool enabled) {
 
 void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
     header_visibility_callback_ = std::move(cb);
+    refresh_docked_panel_open_state();
     if (header_visibility_callback_) {
 
         header_visibility_callback_(false);
@@ -3060,6 +3064,7 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
     if (room_cfg_ui_) {
         room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
             room_config_panel_visible_ = visible;
+            refresh_docked_panel_open_state();
             if (header_visibility_callback_) {
 
                 header_visibility_callback_(false);
@@ -3069,6 +3074,7 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
     if (info_ui_) {
         info_ui_->set_header_visibility_callback([this](bool visible) {
             asset_info_panel_visible_ = visible;
+            refresh_docked_panel_open_state();
             if (header_visibility_callback_) {
 
                 header_visibility_callback_(false);
@@ -12646,7 +12652,8 @@ void RoomEditor::sync_shared_footer_navigation() {
 
     constexpr int kCompactFooterHeight = 48;
     constexpr int kEditorFooterHeight = 136;
-    const bool navigation_visible = enabled_ && asset_editor_tab_scope_active();
+    const bool freeze_room_header_footer = devmode::docked_panels::any_qualifying_panel_open();
+    const bool navigation_visible = enabled_ && asset_editor_tab_scope_active() && !freeze_room_header_footer;
     shared_footer_bar_->set_editor_navigation_enabled(navigation_visible);
     shared_footer_bar_->set_height(navigation_visible ? kEditorFooterHeight : kCompactFooterHeight);
 
@@ -13254,6 +13261,8 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     if (usable.w <= 0 || usable.h <= 0) {
         usable = SDL_Rect{0, 0, screen_w_, screen_h_};
     }
+    usable.y = 0;
+    usable.h = std::max(0, screen_h_);
 
     const int usable_left = usable.x;
     const int usable_right = usable.x + usable.w;
@@ -13265,8 +13274,8 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
 
     const int panel_margin = 12;
     const int panel_gap = 12;
-    const int right_panel_y = usable.y + panel_margin;
-    const int right_panel_h = std::max(0, usable.h - panel_margin * 2);
+    const int right_panel_y = 0;
+    const int right_panel_h = std::max(0, screen_h_);
     int right_panel_w = std::min(320, std::max(220, usable.w / 3));
     const int rightmost_panel_x_limit = usable_right - panel_margin;
     right_panel_w = std::min(right_panel_w, std::max(0, rightmost_panel_x_limit - usable_left));
@@ -13275,8 +13284,8 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     const int secondary_panel_right_edge = right_panel_rect.x - panel_gap;
     const int secondary_panel_w = std::max(0, std::min(332, secondary_panel_right_edge - (usable_left + panel_margin)));
     const int secondary_panel_x = std::max(usable_left + panel_margin, secondary_panel_right_edge - secondary_panel_w);
-    SDL_Rect attack_payload_rect{secondary_panel_x, right_panel_y, secondary_panel_w, right_panel_h};
-    SDL_Rect oval_point_child_rect{secondary_panel_x, right_panel_y, secondary_panel_w, right_panel_h};
+    SDL_Rect attack_payload_rect{secondary_panel_x, 0, secondary_panel_w, std::max(0, screen_h_)};
+    SDL_Rect oval_point_child_rect{secondary_panel_x, 0, secondary_panel_w, std::max(0, screen_h_)};
 
     auto progress_for = [this]() -> float {
         if (!asset_editor_transition_.active || asset_editor_transition_.duration_frames <= 0) {
@@ -13340,8 +13349,8 @@ void RoomEditor::apply_asset_editor_panel_overrides() {
     stack_animation_list_bounds_ = SDL_Rect{0, 0, 0, 0};
     if (stack_animation_list_panel_) {
         if (is_stack_animation_list_subview_active()) {
-            const int list_panel_y = usable.y + panel_margin;
-            const int list_panel_h = std::max(0, usable.h - panel_margin * 2);
+            const int list_panel_y = 0;
+            const int list_panel_h = std::max(0, screen_h_);
             int list_panel_w = std::min(320, std::max(220, usable.w / 4));
             const int max_list_right = secondary_panel_w > 0 ? secondary_panel_x - panel_gap : right_panel_x - panel_gap;
             list_panel_w = std::min(list_panel_w, std::max(0, max_list_right - (usable_left + panel_margin)));
@@ -13434,6 +13443,7 @@ void RoomEditor::update_asset_editor_layout() {
     ensure_stack_animation_list_panel();
 
     apply_asset_editor_panel_overrides();
+    refresh_docked_panel_open_state();
     sync_shared_footer_navigation();
     ++stack_animation_sync_frames_;
     StackAnimationListSyncKey next_sync_key;
@@ -25892,16 +25902,11 @@ void RoomEditor::ensure_spawn_group_config_ui() {
 void RoomEditor::update_room_config_bounds() {
     constexpr int kPanelWidth = 420;
     constexpr int kMargin = 12;
-    SDL_Rect usable = DockManager::instance().usableRect();
-    if (usable.w <= 0 || usable.h <= 0) {
-        const int footer_h = (shared_footer_bar_ && shared_footer_bar_->visible()) ? shared_footer_bar_->rect().h : 0;
-        usable = SDL_Rect{kMargin, kMargin, std::max(0, screen_w_ - (kMargin * 2)),
-                          std::max(240, screen_h_ - footer_h - (kMargin * 2))};
-    }
+    SDL_Rect usable = SDL_Rect{0, 0, std::max(0, screen_w_), std::max(0, screen_h_)};
     const int panel_w = std::min(std::max(320, kPanelWidth), std::max(320, screen_w_ - (kMargin * 2)));
     room_config_bounds_ = SDL_Rect{
         std::max(kMargin, screen_w_ - panel_w - kMargin),
-        usable.y,
+        0,
         panel_w,
         std::max(0, usable.h)
     };
@@ -25925,6 +25930,15 @@ void RoomEditor::refresh_room_config_visibility() {
     room_config_panel_visible_ = room_cfg_ui_->visible();
     room_config_dock_open_ = room_config_panel_visible_;
     update_spawn_group_config_panel_layout();
+    refresh_docked_panel_open_state();
+}
+
+void RoomEditor::refresh_docked_panel_open_state() {
+    const bool room_right_docked_open =
+        (enabled_ && room_config_panel_visible_) ||
+        (enabled_ && is_asset_info_modal_blocking()) ||
+        (enabled_ && is_camera_settings_open());
+    devmode::docked_panels::set_qualifying_panel_open("room_editor_right_panels", room_right_docked_open);
 }
 
 void RoomEditor::handle_delete_shortcut(const Input& input) {

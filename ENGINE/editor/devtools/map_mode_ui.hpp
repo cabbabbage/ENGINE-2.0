@@ -137,6 +137,7 @@ private:
                                  devmode::core::DevSaveCoordinator::Priority::Debounced);
     void update_room_config_header_controls();
     void close_legacy_room_config_if_visible(const char* reason);
+    void refresh_docked_panel_open_state();
     void begin_map_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_map_color_sampling(bool silent = false);
     void complete_map_color_sampling(SDL_Color color);

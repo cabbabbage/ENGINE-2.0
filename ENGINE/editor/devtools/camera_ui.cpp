@@ -19,6 +19,7 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/DockManager.hpp"
 #include "devtools/dm_styles.hpp"
+#include "devtools/docked_panel_layout_policy.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
@@ -451,6 +452,7 @@ void CameraUIPanel::build_ui() {
 
 void CameraUIPanel::configure_container() {
     container_.set_header_text("Camera");
+    container_.set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy::FullHeightDefault);
     container_.set_scrollbar_visible(true);
     container_.set_content_clip_enabled(true);
     container_.set_on_close([this]() { this->close(); });

@@ -5,6 +5,8 @@
 #include <memory>
 #include <string>
 
+#include "docked_panel_layout_policy.hpp"
+
 class Input;
 class DMButton;
 struct DMButtonStyle;
@@ -52,6 +54,7 @@ public:
 
     void set_panel_bounds_override(const SDL_Rect& bounds);
     void clear_panel_bounds_override();
+    void set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy policy);
 
     void open();
     void close();
@@ -103,6 +106,8 @@ private:
 
     bool panel_override_active_ = false;
     SDL_Rect panel_override_{0, 0, 0, 0};
+    devmode::docked_panels::DockedPanelLayoutPolicy docked_layout_policy_ =
+        devmode::docked_panels::DockedPanelLayoutPolicy::SpecialHeightException;
 
     bool scrollbar_visible_ = false;
     bool content_clip_enabled_ = true;

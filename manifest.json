@@ -27732,20 +27732,20 @@
           "camera_tilt_deg": 35.395111083984375,
           "camera_zoom_percent": 0,
           "coarseness": {
-            "center": 3344,
-            "falloff": 8,
+            "center": 1262,
+            "falloff": 0,
             "random": true,
-            "span": 8,
+            "span": 195,
             "weights": {
-              "center": 0.5182059734206214,
-              "edge": 0.15277777841808413,
-              "falloff": 0.3290162481612945
+              "center": 0.08333333333333333,
+              "edge": 0.3176064950460553,
+              "falloff": 0.5990601716206113
             }
           },
           "display_color": [
-            54,
-            31,
-            204,
+            242,
+            36,
+            36,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28263,9 +28263,9 @@
             }
           },
           "display_color": [
-            85,
-            242,
-            133,
+            204,
+            31,
+            147,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28299,9 +28299,9 @@
             }
           },
           "display_color": [
-            240,
-            242,
+            126,
             85,
+            242,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28340,9 +28340,9 @@
             }
           },
           "display_color": [
-            224,
-            79,
-            133,
+            31,
+            204,
+            146,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28555,9 +28555,9 @@
             }
           },
           "display_color": [
-            138,
-            85,
-            242,
+            204,
+            137,
+            71,
             255
           ],
           "inherit_map_floor_color": true,
@@ -28597,7 +28597,7 @@
           },
           "display_color": [
             36,
-            120,
+            143,
             242,
             255
           ],

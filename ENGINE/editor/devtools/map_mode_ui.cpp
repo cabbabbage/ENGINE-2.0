@@ -13,6 +13,7 @@
 #include "room_editor.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
+#include "docked_panel_layout_policy.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "devtools/widgets.hpp"
@@ -364,6 +365,7 @@ DevFooterBar* MapModeUI::get_footer_bar() const {
 
 void MapModeUI::set_room_editor(RoomEditor* room_editor) {
     room_editor_ = room_editor;
+    refresh_docked_panel_open_state();
 }
 
 void MapModeUI::collect_sliding_container_rects(std::vector<SDL_Rect>& out) const {
@@ -444,6 +446,14 @@ void MapModeUI::apply_sliding_area_bounds() {
     if (layer_controls_container_) {
         layer_controls_container_->set_panel_bounds_override(right_bounds);
     }
+}
+
+void MapModeUI::refresh_docked_panel_open_state() {
+    const bool map_right_panel_open =
+        (room_config_container_ && room_config_container_->is_visible()) ||
+        (rooms_list_container_ && rooms_list_container_->is_visible()) ||
+        (layer_controls_container_ && layer_controls_container_->is_visible());
+    devmode::docked_panels::set_qualifying_panel_open("map_mode_right_panels", map_right_panel_open);
 }
 
 void MapModeUI::set_footer_always_visible(bool on) {
@@ -768,6 +778,7 @@ void MapModeUI::ensure_panels() {
 
     if (!rooms_list_container_) {
         rooms_list_container_ = std::make_unique<SlidingWindowContainer>();
+        rooms_list_container_->set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy::FullHeightDefault);
 
         rooms_list_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
@@ -795,6 +806,7 @@ void MapModeUI::ensure_panels() {
     }
     if (!layer_controls_container_) {
         layer_controls_container_ = std::make_unique<SlidingWindowContainer>();
+        layer_controls_container_->set_docked_layout_policy(devmode::docked_panels::DockedPanelLayoutPolicy::FullHeightDefault);
 
         layer_controls_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
@@ -951,10 +963,14 @@ void MapModeUI::sync_footer_button_states() {
 void MapModeUI::update_footer_visibility() {
     if (!footer_bar_) return;
     footer_bar_->set_bounds(screen_w_, screen_h_);
+    refresh_docked_panel_open_state();
 
     const bool editor_navigation_active = footer_bar_->editor_navigation_enabled();
+    const bool freeze_room_header_footer =
+        (header_mode_ == HeaderMode::Room) && devmode::docked_panels::any_qualifying_panel_open();
     const bool should_show = (editor_navigation_active || !headers_suppressed_) &&
-                             (footer_always_visible_ || map_mode_active_);
+                             (footer_always_visible_ || map_mode_active_) &&
+                             !freeze_room_header_footer;
     footer_bar_->set_visible(should_show);
 }
 
@@ -1278,6 +1294,7 @@ void MapModeUI::show_sliding_panel(SlidingPanel panel, bool) {
             active_sliding_panel_ = SlidingPanel::None;
             break;
     }
+    refresh_docked_panel_open_state();
 }
 
 void MapModeUI::ensure_room_configurator() {

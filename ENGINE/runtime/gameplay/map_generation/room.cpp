@@ -29,6 +29,9 @@ using vibble::strings::to_lower_copy;
 constexpr int kDefaultRoomSize = 9;
 constexpr int kMinRoomSize = 7;
 constexpr int kMaxRoomSize = 20;
+constexpr int kDefaultTrailSize = 5;
+constexpr int kMinTrailSize = 5;
+constexpr int kMaxTrailSize = 10;
 
 RoomAreaSerialization::Kind parse_kind_value(const std::string& value) {
         if (value.empty()) return RoomAreaSerialization::Kind::Unknown;
@@ -477,14 +480,22 @@ Room::Room(Point origin,
             room_area->set_type(type.empty() ? "room" : type);
         }
     } else {
+        const bool is_trail = to_lower_copy(type) == "trail";
+        const int default_size = is_trail ? kDefaultTrailSize : kDefaultRoomSize;
+        const int min_size = is_trail ? kMinTrailSize : kMinRoomSize;
+        const int max_size = is_trail ? kMaxTrailSize : kMaxRoomSize;
+        const bool coerce_to_default = is_trail;
         const auto size_info = room_legacy_migration::resolve_room_size(
             assets_json,
-            kDefaultRoomSize,
+            default_size,
+            min_size,
+            max_size,
+            coerce_to_default,
             [this](const char* reason) {
                 std::cout << "[Room] Legacy room migration executed for '" << room_name
                           << "' reason=" << (reason ? reason : "unknown") << "\n";
             });
-        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
+        const int size = std::clamp(size_info.size, min_size, max_size);
 
         if (testing) {
             std::cout << "[Room] Creating area from JSON: " << room_name
@@ -626,8 +637,18 @@ std::pair<int, int> Room::current_room_dimensions() const {
                 return {w, h};
         }
 
-        const auto size_info = room_legacy_migration::resolve_room_size(assets_json, kDefaultRoomSize, nullptr);
-        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
+        const bool is_trail = to_lower_copy(type) == "trail";
+        const int default_size = is_trail ? kDefaultTrailSize : kDefaultRoomSize;
+        const int min_size = is_trail ? kMinTrailSize : kMinRoomSize;
+        const int max_size = is_trail ? kMaxTrailSize : kMaxRoomSize;
+        const auto size_info = room_legacy_migration::resolve_room_size(
+            assets_json,
+            default_size,
+            min_size,
+            max_size,
+            is_trail,
+            nullptr);
+        const int size = std::clamp(size_info.size, min_size, max_size);
         const int radius = size * vibble::grid::delta(size);
         return {radius * 2, radius * 2};
 }
@@ -975,8 +996,18 @@ void Room::upsert_named_area(const Area& area,
 
 nlohmann::json Room::create_static_room_json(std::string name) {
         json out;
-        const auto size_info = room_legacy_migration::resolve_room_size(assets_json, kDefaultRoomSize, nullptr);
-        const int size = std::clamp(size_info.size, kMinRoomSize, kMaxRoomSize);
+        const bool is_trail = to_lower_copy(type) == "trail";
+        const int default_size = is_trail ? kDefaultTrailSize : kDefaultRoomSize;
+        const int min_size = is_trail ? kMinTrailSize : kMinRoomSize;
+        const int max_size = is_trail ? kMaxTrailSize : kMaxRoomSize;
+        const auto size_info = room_legacy_migration::resolve_room_size(
+            assets_json,
+            default_size,
+            min_size,
+            max_size,
+            is_trail,
+            nullptr);
+        const int size = std::clamp(size_info.size, min_size, max_size);
         int width = 0, height = 0;
         if (room_area) {
                 bounds_to_size(room_area->get_bounds(), width, height);

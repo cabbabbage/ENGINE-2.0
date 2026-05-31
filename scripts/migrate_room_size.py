@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-DEFAULT_SIZE = 9
+DEFAULT_ROOM_SIZE = 9
+DEFAULT_TRAIL_SIZE = 5
 LEGACY_ROOM_KEYS = {
     "geometry",
     "radius",
@@ -19,12 +20,12 @@ LEGACY_ROOM_KEYS = {
 }
 
 
-def migrate_room_entry(entry: Any) -> bool:
+def migrate_room_entry(entry: Any, default_size: int) -> bool:
     if not isinstance(entry, dict):
         return False
     changed = False
-    if entry.get("size") != DEFAULT_SIZE:
-        entry["size"] = DEFAULT_SIZE
+    if entry.get("size") != default_size:
+        entry["size"] = default_size
         changed = True
     for key in LEGACY_ROOM_KEYS:
         if key in entry:
@@ -45,12 +46,12 @@ def migrate_file(path: Path) -> tuple[bool, int]:
 
     changed = False
     migrated_entries = 0
-    for section_name in ("rooms_data", "trails_data"):
+    for section_name, default_size in (("rooms_data", DEFAULT_ROOM_SIZE), ("trails_data", DEFAULT_TRAIL_SIZE)):
         section = data.get(section_name)
         if not isinstance(section, dict):
             continue
         for _, room_entry in section.items():
-            if migrate_room_entry(room_entry):
+            if migrate_room_entry(room_entry, default_size):
                 changed = True
             if isinstance(room_entry, dict):
                 migrated_entries += 1

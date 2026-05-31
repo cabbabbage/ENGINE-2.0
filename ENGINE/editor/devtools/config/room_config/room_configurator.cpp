@@ -33,6 +33,9 @@ constexpr int kRoomConfigPanelMinWidth = 260;
 constexpr int kDefaultRoomSize = 9;
 constexpr int kMinRoomSize = 7;
 constexpr int kMaxRoomSize = 20;
+constexpr int kDefaultTrailSize = 5;
+constexpr int kMinTrailSize = 5;
+constexpr int kMaxTrailSize = 10;
 constexpr int kSliderExpansionMargin = 64;
 constexpr int kSliderExpansionFactor = 2;
 constexpr double kDegreesFullCircle = 360.0;
@@ -770,12 +773,22 @@ struct RoomConfigurator::State {
 
     bool ensure_valid(bool allow_height, bool enforce_dimensions = true) {
         (void)enforce_dimensions;
-        (void)allow_height;
+        const bool is_trail_context = !allow_height;
         bool mutated = false;
-        const int clamped_size = std::clamp(size, kMinRoomSize, kMaxRoomSize);
-        if (clamped_size != size) {
-            size = clamped_size;
-            mutated = true;
+        if (is_trail_context) {
+            const int normalized = (size < kMinTrailSize || size > kMaxTrailSize)
+                ? kDefaultTrailSize
+                : std::clamp(size, kMinTrailSize, kMaxTrailSize);
+            if (normalized != size) {
+                size = normalized;
+                mutated = true;
+            }
+        } else {
+            const int clamped_size = std::clamp(size, kMinRoomSize, kMaxRoomSize);
+            if (clamped_size != size) {
+                size = clamped_size;
+                mutated = true;
+            }
         }
 
         const double normalized_direction = normalize_angle_degrees(trail_connection_direction_deg);
@@ -801,7 +814,7 @@ struct RoomConfigurator::State {
                         const std::vector<std::string>& geometry_options,
                         bool allow_height) {
         (void)geometry_options;
-        (void)allow_height;
+        const bool is_trail_context = !allow_height;
         const nlohmann::json& src = data.is_object() ? data : empty_object();
         if (auto value = read_json_string(src, "name")) {
             name = *value;
@@ -811,7 +824,7 @@ struct RoomConfigurator::State {
             name.clear();
         }
 
-        size = kDefaultRoomSize;
+        size = is_trail_context ? kDefaultTrailSize : kDefaultRoomSize;
         if (auto value = read_json_int(src, "size")) {
             size = *value;
         }
@@ -855,7 +868,7 @@ struct RoomConfigurator::State {
             }
         }
 
-        ensure_valid(true);
+        ensure_valid(allow_height);
     }
 
     void apply_to_json(nlohmann::json& dest,
@@ -863,10 +876,16 @@ struct RoomConfigurator::State {
                        bool include_camera = true,
                        bool include_trail_connection_sector = true,
                        bool include_boss = true) const {
-        (void)allow_height;
+        const bool is_trail_context = !allow_height;
         if (!dest.is_object()) dest = nlohmann::json::object();
         dest["name"] = name;
-        dest["size"] = std::clamp(size, kMinRoomSize, kMaxRoomSize);
+        if (is_trail_context) {
+            dest["size"] = (size < kMinTrailSize || size > kMaxTrailSize)
+                ? kDefaultTrailSize
+                : std::clamp(size, kMinTrailSize, kMaxTrailSize);
+        } else {
+            dest["size"] = std::clamp(size, kMinRoomSize, kMaxRoomSize);
+        }
         if (include_boss) {
             dest["is_boss"] = is_boss;
         } else {
@@ -1902,7 +1921,13 @@ bool RoomConfigurator::is_locked() const {
 }
 
 int RoomConfigurator::selected_size() const {
-    if (!state_) return kDefaultRoomSize;
+    if (!state_) return is_trail_context_ ? kDefaultTrailSize : kDefaultRoomSize;
+    if (is_trail_context_) {
+        if (state_->size < kMinTrailSize || state_->size > kMaxTrailSize) {
+            return kDefaultTrailSize;
+        }
+        return std::clamp(state_->size, kMinTrailSize, kMaxTrailSize);
+    }
     return std::clamp(state_->size, kMinRoomSize, kMaxRoomSize);
 }
 
@@ -1964,9 +1989,9 @@ void RoomConfigurator::rebuild_rows_internal() {
 
     size_stepper_ = std::make_unique<DMNumericStepper>(
         "Size",
-        kMinRoomSize,
-        kMaxRoomSize,
-        std::clamp(state_->size, kMinRoomSize, kMaxRoomSize));
+        is_trail_context_ ? kMinTrailSize : kMinRoomSize,
+        is_trail_context_ ? kMaxTrailSize : kMaxRoomSize,
+        selected_size());
     size_stepper_->set_step(1);
     size_widget_ = std::make_unique<StepperWidget>(size_stepper_.get());
 
@@ -2276,7 +2301,14 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
 
     if (size_stepper_) {
-        int value = std::clamp(size_stepper_->value(), kMinRoomSize, kMaxRoomSize);
+        int value = size_stepper_->value();
+        if (is_trail_context_) {
+            value = (value < kMinTrailSize || value > kMaxTrailSize)
+                ? kDefaultTrailSize
+                : std::clamp(value, kMinTrailSize, kMaxTrailSize);
+        } else {
+            value = std::clamp(value, kMinRoomSize, kMaxRoomSize);
+        }
         if (value != state_->size) {
             state_->size = value;
             changed = true;

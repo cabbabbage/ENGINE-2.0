@@ -22,6 +22,9 @@ namespace {
 constexpr int kDefaultRoomSize = 9;
 constexpr int kMinRoomSize = 7;
 constexpr int kMaxRoomSize = 20;
+constexpr int kDefaultTrailSize = 5;
+constexpr int kMinTrailSize = 5;
+constexpr int kMaxTrailSize = 10;
 constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;
@@ -146,12 +149,18 @@ bool normalize_trail_connection_sector(nlohmann::json& entry, bool include_for_r
     return changed;
 }
 
-int normalize_room_size(const nlohmann::json& entry) {
-    int size = kDefaultRoomSize;
+int normalize_room_size(const nlohmann::json& entry, bool is_trail_entry) {
+    const int default_size = is_trail_entry ? kDefaultTrailSize : kDefaultRoomSize;
+    const int min_size = is_trail_entry ? kMinTrailSize : kMinRoomSize;
+    const int max_size = is_trail_entry ? kMaxTrailSize : kMaxRoomSize;
+    int size = default_size;
     if (entry.is_object() && entry.contains("size")) {
         (void)json_to_int(entry["size"], size);
     }
-    return std::clamp(size, kMinRoomSize, kMaxRoomSize);
+    if (is_trail_entry && (size < min_size || size > max_size)) {
+        return default_size;
+    }
+    return std::clamp(size, min_size, max_size);
 }
 
 bool normalize_room_config_entry(nlohmann::json& entry,
@@ -175,7 +184,7 @@ bool normalize_room_config_entry(nlohmann::json& entry,
                   << " entry '" << key_name << "'.\n";
     };
 
-    const int normalized_size = normalize_room_size(entry);
+    const int normalized_size = normalize_room_size(entry, is_trail_entry);
     if (!entry.contains("size") || !entry["size"].is_number_integer() || entry["size"].get<int>() != normalized_size) {
         entry["size"] = normalized_size;
         changed = true;
@@ -982,7 +991,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"MainTrail", nlohmann::json::object({
             {"name", "MainTrail"},
             {"display_color", nlohmann::json::array({85, 242, 143, 255})},
-            {"size", kDefaultRoomSize},
+            {"size", kDefaultTrailSize},
             {"coarseness", vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0))},
             {"tags", nlohmann::json::array()},
             {"anti_tags", nlohmann::json::array()},

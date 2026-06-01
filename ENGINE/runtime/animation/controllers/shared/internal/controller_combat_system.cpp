@@ -1,12 +1,11 @@
 #include "animation/controllers/shared/internal/controller_combat_system.hpp"
 
 #include <algorithm>
-#include <utility>
 
 #include "animation/controllers/shared/internal/controller_attack_detection_helper.hpp"
 #include "animation/controllers/shared/internal/controller_attack_processing_helper.hpp"
+#include "animation/controllers/shared/internal/enemy_combat_coordinator.hpp"
 #include "animation/animation_update.hpp"
-#include "animation/controllers/shared/attack_payload.hpp"
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "utils/frame_stats_recorder.hpp"
@@ -14,60 +13,8 @@
 
 namespace animation_update::custom_controllers::internal {
 
-namespace {
-
-animation_update::AttackPayload payload_from_current_attack_box(const Asset& self) {
-    for (const auto& volume : self.current_attack_box_volumes()) {
-        if (!volume.enabled || !volume.valid) {
-            continue;
-        }
-        animation_update::AttackPayload payload = volume.payload;
-        if (payload.payload_id.empty()) {
-            payload.payload_id = volume.payload_id.empty() ? volume.id : volume.payload_id;
-        }
-        if (payload.damage_amount <= 0) {
-            payload.damage_amount = std::max(0, volume.damage_amount);
-        }
-        if (payload.damage_amount > 0) {
-            return animation_update::sanitize_attack_payload(std::move(payload));
-        }
-    }
-
-    auto payload = animation_update::make_default_attack_payload();
-    payload.payload_id = "enemy_contact_attack";
-    payload.damage_amount = 20;
-    payload.hitback_enabled = true;
-    payload.hitback_distance = 60.0f;
-    return animation_update::sanitize_attack_payload(std::move(payload));
-}
-
-bool dispatch_enemy_contact_hit(Asset& attacker, Asset& target) {
-    animation_update::Attack attack{};
-    attack.attacker_asset_id = animation_update::detail::stable_asset_id(attacker);
-    attack.attacker_asset_name = attacker.info ? attacker.info->name : std::string{};
-    attack.target_asset_id = animation_update::detail::stable_asset_id(target);
-    attack.target_asset_name = target.info ? target.info->name : std::string{};
-    attack.attack_type = "enemy_contact_attack";
-    attack.payload = payload_from_current_attack_box(attacker);
-    attack.attack_payload_id = attack.payload.payload_id;
-    attack.damage_amount = attack.payload.damage_amount;
-    attack.hit_x = static_cast<float>(attacker.world_x() + target.world_x()) * 0.5f;
-    attack.hit_y = static_cast<float>(attacker.world_y() + target.world_y()) * 0.5f;
-    attack.hit_z = static_cast<float>(attacker.world_z() + target.world_z()) * 0.5f;
-    if (const auto* frame = attacker.current_animation_frame()) {
-        attack.source_frame_index = frame->frame_index;
-    }
-    target.send_attack(attack);
-    return true;
-}
-
-} // namespace
-
 bool ControllerCombatSystem::is_target_in_range(const Asset& self, const Asset& target, int range_px) {
-    const long long dx = static_cast<long long>(target.world_x()) - static_cast<long long>(self.world_x());
-    const long long dy = static_cast<long long>(target.world_y()) - static_cast<long long>(self.world_y());
-    const long long dz = static_cast<long long>(target.world_z()) - static_cast<long long>(self.world_z());
-    const long long dist_sq = (dx * dx) + (dy * dy) + (dz * dz);
+    const long long dist_sq = EnemyCombatCoordinator::horizontal_distance_sq(self, target);
     const long long range = std::max(0, range_px);
     return dist_sq <= (range * range);
 }
@@ -147,27 +94,24 @@ bool ControllerCombatSystem::try_attack_target(Asset& self,
     const bool enemy_attacker =
         self.info && asset_types::canonicalize(self.info->type) == asset_types::enemy;
     if (enemy_attacker) {
-        self.update_anchor_basis_if_needed();
-        self.refresh_anchor_point_cache_from_frame();
-        self.refresh_runtime_box_cache_from_frame();
-
-        bool hit = apply_attack_hit(self, target);
-        if (!hit) {
-            // Custom enemy controllers are allowed to own combat. If authored attack boxes
-            // miss because of frame/path metadata drift, still land the close-range commit
-            // on the intended player target instead of silently doing nothing.
-            hit = dispatch_enemy_contact_hit(self, target);
-            auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
-            frame_stats.add("enemy_ai.hit_dispatch_success_count", 1.0);
-        }
-        if (should_start_cooldown_after_attack(hit)) {
-            start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
-        }
+        const EnemyAttackProfile profile = EnemyCombatCoordinator::make_legacy_profile(
+            cooldown_key,
+            cooldown_seconds,
+            range_px,
+            animation_id.empty() ? self.current_animation : animation_id,
+            required_tags,
+            excluded_tags);
+        const AttackRequestResult request =
+            EnemyCombatCoordinator::commit_startup(self, target, profile);
+        const bool committed_to_runtime =
+            self.anim_ && self.anim_->commit_attack_target(target, self.current_animation);
+        start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
         if (self.anim_ && self.anim_->debug_enabled()) {
-            vibble::log::info(std::string{"[AICombat] Enemy attack committed to player target; dispatched="} +
-                              (hit ? "true" : "false"));
+            vibble::log::info("[AICombat] Enemy attack committed to active-window dispatch profile='" +
+                              request.profile.id + "' runtime_commit=" +
+                              std::string{committed_to_runtime ? "true" : "false"});
         }
-        return hit;
+        return request.accepted && committed_to_runtime;
     }
 
     const bool hit = apply_attack_hit(self, target);

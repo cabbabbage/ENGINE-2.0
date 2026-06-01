@@ -132,3 +132,7 @@ bool AnimationUpdate::set_animation_by_tags_deterministic(const std::vector<std:
     }
     return set_animation(*resolved, force_transition);
 }
+
+bool AnimationUpdate::commit_attack_target(Asset& target, const std::string& animation_id) {
+    return runtime_ ? runtime_->commit_attack_target(target, animation_id) : false;
+}

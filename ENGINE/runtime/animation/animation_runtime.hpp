@@ -90,6 +90,7 @@ public:
     bool has_active_plan() const;
     bool auto_attack_commitment_active() const;
     bool maybe_trigger_attack_on_cycle_boundary();
+    bool commit_attack_target(Asset& target, const std::string& animation_id = {});
 
 private:
     struct FrameAdvanceEvent {

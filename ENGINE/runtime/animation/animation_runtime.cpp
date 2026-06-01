@@ -298,6 +298,17 @@ struct PlaybackController {
 
 struct CombatController {
     static void clear_commitment(AnimationRuntime& runtime) {
+        const bool had_commitment = runtime.combat_state_.committed_attack_target_asset_id.has_value() ||
+                                    !runtime.combat_state_.committed_attack_animation_id.empty();
+        const bool dispatched_hit =
+            runtime.combat_state_.committed_attack_last_dispatched_frame_index >= 0;
+        if (had_commitment) {
+            auto& frame_stats = runtime_stats::FrameStatsRecorder::instance();
+            frame_stats.set("enemy_ai.attack_phase", dispatched_hit ? "Complete" : "CompleteWhiff");
+            if (!dispatched_hit) {
+                frame_stats.add("enemy_ai.attack_commit_whiff_count", 1.0);
+            }
+        }
         runtime.combat_state_.committed_attack_target_asset_id = std::nullopt;
         runtime.combat_state_.committed_attack_animation_id.clear();
         runtime.combat_state_.committed_attack_path_index = 0;
@@ -364,6 +375,9 @@ bool AnimationRuntime::attacking_enabled_for_self() const {
 bool AnimationRuntime::attacking_enabled_for_active_plan() const {
     if (!attacking_enabled_for_self()) {
         return false;
+    }
+    if (combat_state_.committed_attack_target_asset_id.has_value()) {
+        return true;
     }
     if (!planner_iface_) {
         return true;
@@ -639,6 +653,37 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
     return true;
 }
 
+bool AnimationRuntime::commit_attack_target(Asset& target, const std::string& animation_id) {
+    if (!self_ || !self_->info || !target.active || target.dead || !target.isHitboxEnabled()) {
+        return false;
+    }
+    const std::string target_id = animation_update::detail::stable_asset_id(target);
+    if (target_id.empty()) {
+        return false;
+    }
+    const std::string committed_animation = animation_id.empty() ? self_->current_animation : animation_id;
+    if (committed_animation.empty()) {
+        return false;
+    }
+    combat_state_.committed_attack_target_asset_id = target_id;
+    combat_state_.committed_attack_animation_id = committed_animation;
+    combat_state_.committed_attack_path_index = path_index_for(committed_animation);
+    combat_state_.committed_attack_last_dispatched_frame_index = -1;
+    combat_state_.committed_attack_last_payload_id.clear();
+    combat_state_.attack_recovery_pending = false;
+    combat_state_.attack_recovery_animation_id.clear();
+    runtime_stats::FrameStatsRecorder::instance().add("enemy_ai.attack_commit_runtime_count", 1.0);
+    runtime_stats::FrameStatsRecorder::instance().set("enemy_ai.attack_phase", "Startup");
+    if (debug_enabled_) {
+        const std::string self_name =
+            (self_->info && !self_->info->name.empty()) ? self_->info->name : std::string{"<unknown>"};
+        vibble::log::info("[AICombat] Runtime attack target committed for '" + self_name +
+                          "' animation='" + committed_animation +
+                          "' target_id='" + target_id + "'");
+    }
+    return true;
+}
+
 bool AnimationRuntime::current_animation_is_attack() const {
     if (!self_ || !self_->info) {
         return false;
@@ -731,6 +776,8 @@ void AnimationRuntime::dispatch_active_attack_payload() {
     }
 
     target->send_attack(attack);
+    runtime_stats::FrameStatsRecorder::instance().set("enemy_ai.attack_phase", "Active");
+    runtime_stats::FrameStatsRecorder::instance().add("enemy_ai.attack_commit_hit_count", 1.0);
     if (debug_enabled_) {
         const std::string target_name =
             (target->info && !target->info->name.empty()) ? target->info->name : std::string{"<unknown>"};

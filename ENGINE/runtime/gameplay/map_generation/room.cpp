@@ -17,6 +17,7 @@
 #include <random>
 #include <string>
 #include "utils/grid.hpp"
+#include "utils/coarseness_range.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/ranged_color.hpp"
 #include "rendering/render/camera_controller.hpp"
@@ -475,7 +476,9 @@ Room::Room(Point origin,
         if (testing) {
             std::cout << "[Room] Using precomputed area for: " << room_name << "\n";
         }
-        room_area = std::make_unique<Area>(room_name, precomputed_area->get_points(), 3);
+        room_area = std::make_unique<Area>(room_name,
+                                           precomputed_area->get_points(),
+                                           precomputed_area->resolution());
         if (room_area) {
             room_area->set_type(type.empty() ? "room" : type);
         }
@@ -516,6 +519,8 @@ Room::Room(Point origin,
             room_area->set_type(type.empty() ? "room" : type);
         }
     }
+
+    base_room_area = std::make_unique<Area>(*room_area);
 
     if (!auto_populate_assets || !asset_lib || !room_area) {
         return;
@@ -1015,34 +1020,8 @@ nlohmann::json Room::create_static_room_json(std::string name) {
 	out["name"] = std::move(name);
         out["size"] = size;
         if (assets_json.contains("coarseness")) {
-                const auto& c = assets_json["coarseness"];
-                int legacy_coarseness = 0;
-                if (c.is_number_integer()) {
-                        legacy_coarseness = c.get<int>();
-                        const int clamped = std::clamp(legacy_coarseness, 0, 4000);
-                        if (clamped <= 0) {
-                                out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-                        } else {
-                                const int min_radius = std::max(8, 12 + (clamped / 18));
-                                const int max_radius = std::max(min_radius, 36 + (clamped / 4));
-                                out["coarseness"] = vibble::weighted_range::to_json(
-                                    vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
-                        }
-                } else if (c.is_number_float()) {
-                        legacy_coarseness = static_cast<int>(std::lround(c.get<double>()));
-                        const int clamped = std::clamp(legacy_coarseness, 0, 4000);
-                        if (clamped <= 0) {
-                                out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
-                        } else {
-                                const int min_radius = std::max(8, 12 + (clamped / 18));
-                                const int max_radius = std::max(min_radius, 36 + (clamped / 4));
-                                out["coarseness"] = vibble::weighted_range::to_json(
-                                    vibble::weighted_range::make_legacy_uniform(min_radius, max_radius));
-                        }
-                } else {
-                        out["coarseness"] = vibble::weighted_range::to_json(
-                            vibble::weighted_range::from_json(c, vibble::weighted_range::make_flat(0)));
-                }
+                out["coarseness"] = vibble::weighted_range::to_json(
+                    vibble::coarseness::normalize_range_value(assets_json["coarseness"]));
         } else {
                 out["coarseness"] = vibble::weighted_range::to_json(vibble::weighted_range::make_flat(0));
         }

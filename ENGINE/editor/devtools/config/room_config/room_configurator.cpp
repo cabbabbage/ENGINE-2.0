@@ -6,6 +6,7 @@
 #include "gameplay/map_generation/room.hpp"
 #include "tag_editor_widget.hpp"
 #include "tag_utils.hpp"
+#include "utils/coarseness_range.hpp"
 #include "utils/input.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
@@ -44,9 +45,8 @@ constexpr double kTrailSectorDefaultDirectionDeg = 0.0;
 constexpr int kTrailSectorDefaultWidthPercent = 100;
 constexpr int kTrailSectorMinWidthPercent = 25;
 constexpr int kTrailSectorMaxWidthPercent = 100;
-constexpr int kMinCoarseness = 0;
-constexpr int kMaxCoarseness = 4000;
-constexpr int kMinCoarsenessRadius = 8;
+constexpr int kMinCoarseness = vibble::coarseness::kMinCoarseness;
+constexpr int kMaxCoarseness = vibble::coarseness::kMaxCoarseness;
 
 
 const nlohmann::json& empty_object() {
@@ -161,26 +161,9 @@ std::optional<std::string> read_json_string(const nlohmann::json& obj, const std
     return value.get<std::string>();
 }
 
-vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
-    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
-    if (clamped <= 0) {
-        return vibble::weighted_range::make_flat(0);
-    }
-    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
-    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
-    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
-}
-
 vibble::weighted_range::WeightedIntRange read_coarseness_range_field(const nlohmann::json& obj) {
     const auto fallback = vibble::weighted_range::make_flat(0);
-    if (!obj.is_object() || !obj.contains("coarseness")) {
-        return fallback;
-    }
-    const auto& value = obj["coarseness"];
-    if (auto legacy = read_json_int(obj, "coarseness")) {
-        return coarseness_range_from_legacy(*legacy);
-    }
-    return vibble::weighted_range::from_json(value, fallback);
+    return vibble::coarseness::read_optional_range(obj).value_or(fallback);
 }
 
 bool append_unique(std::vector<std::string>& options, const std::string& value) {

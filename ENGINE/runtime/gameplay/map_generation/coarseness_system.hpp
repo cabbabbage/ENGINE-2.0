@@ -24,14 +24,18 @@ struct CoarsenessGeometryItem {
 
 struct CoarsenessExpansionResult {
     std::string identifier;
+    std::unique_ptr<Area> base_area;
+    std::unique_ptr<Area> expanded_area;
     std::unique_ptr<Area> expansion_area;
-    int circles_attempted = 0;
-    int circles_applied = 0;
-    int circles_skipped = 0;
-    int circle_intersections_succeeded = 0;
+    std::vector<Area> expanded_areas;
+    std::vector<Area> soft_boundary_areas;
+    int perimeter_samples = 0;
+    int expanded_paths = 0;
+    int soft_boundary_paths = 0;
     int uncovered_perimeter_segments = 0;
     double perimeter_length_processed = 0.0;
     double expanded_area_size = 0.0;
+    double soft_boundary_area_size = 0.0;
 };
 
 std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<CoarsenessGeometryItem>& items);

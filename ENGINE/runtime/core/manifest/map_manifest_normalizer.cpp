@@ -12,6 +12,7 @@
 
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/spawn/spawn_group_codec.hpp"
+#include "utils/coarseness_range.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/utils/weighted_range.hpp"
 #include "utils/grid.hpp"
@@ -29,9 +30,6 @@ constexpr double kDefaultTrailSectorDirectionDeg = 0.0;
 constexpr int kDefaultTrailSectorWidthPercent = 100;
 constexpr int kMinTrailSectorWidthPercent = 25;
 constexpr int kMaxTrailSectorWidthPercent = 100;
-constexpr int kMinCoarseness = 0;
-constexpr int kMaxCoarseness = 4000;
-constexpr int kMinCoarsenessRadius = 8;
 constexpr double kDegreesFullRotation = 360.0;
 
 bool json_to_int(const nlohmann::json& value, int& out) {
@@ -59,22 +57,8 @@ bool json_to_double(const nlohmann::json& value, double& out) {
 }
 
 
-vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
-    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
-    if (clamped <= 0) {
-        return vibble::weighted_range::make_flat(0);
-    }
-    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
-    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
-    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
-}
-
 vibble::weighted_range::WeightedIntRange normalize_coarseness_range_value(const nlohmann::json& value) {
-    int legacy = 0;
-    if (json_to_int(value, legacy)) {
-        return coarseness_range_from_legacy(legacy);
-    }
-    return vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
+    return vibble::coarseness::normalize_range_value(value);
 }
 
 double normalize_direction_degrees(double value) {
@@ -363,6 +347,8 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
     bool changed = false;
     const int default_resolution = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
     int resolution = default_resolution;
+    double coverage_density = 1.0;
+    bool root_coverage_locked = false;
     bool root_resolution_locked = false;
     std::map<std::string, nlohmann::json> merged_candidates;
 
@@ -383,6 +369,18 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
                     // Legacy per-room/trail configs are hoisted to one map-wide pool; in that
                     // compatibility path only, keep the densest legacy setting.
                     resolution = std::max(resolution, parsed_resolution);
+                }
+            }
+        }
+        if (config.contains("coverage_density")) {
+            double parsed = coverage_density;
+            if (json_to_double(config["coverage_density"], parsed) && std::isfinite(parsed)) {
+                parsed = std::clamp(parsed, 0.05, 1.0);
+                if (is_root_config) {
+                    coverage_density = parsed;
+                    root_coverage_locked = true;
+                } else if (!root_coverage_locked) {
+                    coverage_density = std::max(coverage_density, parsed);
                 }
             }
         }
@@ -436,6 +434,7 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
         normalized["candidates"].push_back(std::move(candidate));
     }
     normalized["resolution"] = resolution;
+    normalized["coverage_density"] = coverage_density;
 
     vibble::spawn_group_codec::CandidateDefaults defaults;
     defaults.name = "null";
@@ -445,6 +444,10 @@ bool normalize_map_edge_detail_candidates(nlohmann::json& map_manifest) {
     }
     const int sanitized_resolution = normalized.value("resolution", default_resolution);
     normalized["resolution"] = vibble::grid::clamp_resolution(sanitized_resolution);
+    const double sanitized_coverage = normalized.value("coverage_density", 1.0);
+    normalized["coverage_density"] = std::isfinite(sanitized_coverage)
+        ? std::clamp(sanitized_coverage, 0.05, 1.0)
+        : 1.0;
 
     if (root_it == map_manifest.end() || *root_it != normalized) {
         map_manifest["edge_detail_candidates"] = std::move(normalized);
@@ -1004,6 +1007,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
             nlohmann::json::object({{"name", "null"}, {"chance", 0}})
         })},
         {"resolution", vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution)},
+        {"coverage_density", 1.0},
     });
 
     map_info["map_layers_settings"] = nlohmann::json::object({{"min_edge_distance", 200}});

@@ -2,6 +2,7 @@
 
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
+#include "utils/coarseness_range.hpp"
 #include "utils/grid.hpp"
 #include "utils/log.hpp"
 
@@ -24,9 +25,6 @@
 namespace vibble::mapgen::coarseness {
 namespace {
 
-constexpr int kMinCoarseness = 0;
-constexpr int kMaxCoarseness = 4000;
-constexpr int kMinCoarsenessRadius = 8;
 constexpr double kMinValidArea = 0.5;
 constexpr std::uint64_t kDefaultDeterministicSeed = 0x9e3779b97f4a7c15ULL;
 
@@ -77,48 +75,13 @@ std::string bounds_to_string(const std::tuple<int, int, int, int>& bounds) {
            std::to_string(maxx) + "," + std::to_string(maxy) + "]";
 }
 
-vibble::weighted_range::WeightedIntRange coarseness_range_from_legacy(int value) {
-    const int clamped = std::clamp(value, kMinCoarseness, kMaxCoarseness);
-    if (clamped <= 0) {
-        return vibble::weighted_range::make_flat(0);
-    }
-    const int min_radius = std::max(kMinCoarsenessRadius, 12 + (clamped / 18));
-    const int max_radius = std::max(min_radius, 36 + (clamped / 4));
-    return vibble::weighted_range::make_legacy_uniform(min_radius, max_radius);
-}
-
 std::optional<vibble::weighted_range::WeightedIntRange> read_coarseness_range(const Room* room) {
     if (!room) return std::nullopt;
-    const auto& data = room->assets_data();
-    if (!data.is_object() || !data.contains("coarseness")) {
-        return std::nullopt;
-    }
-
-    const auto& value = data["coarseness"];
-    if (value.is_null() || (value.is_object() && value.empty())) {
-        return std::nullopt;
-    }
-
-    if (value.is_number_integer()) {
-        return coarseness_range_from_legacy(value.get<int>());
-    }
-    if (value.is_number_float()) {
-        return coarseness_range_from_legacy(static_cast<int>(std::lround(value.get<double>())));
-    }
-
-    const auto parsed = vibble::weighted_range::from_json(value, vibble::weighted_range::make_flat(0));
-    if (!vibble::weighted_range::is_valid(parsed)) {
-        return std::nullopt;
-    }
-    return parsed;
+    return vibble::coarseness::read_optional_range(room->assets_data());
 }
 
 bool coarseness_range_enabled(const vibble::weighted_range::WeightedIntRange& range) {
-    if (!vibble::weighted_range::is_valid(range)) {
-        return false;
-    }
-    const std::int64_t max_value = range.center + std::llabs(range.span);
-    return max_value > 0;
+    return vibble::coarseness::enabled(range);
 }
 
 int resolve_radius_from_coarseness_range(const vibble::weighted_range::WeightedIntRange& range, std::mt19937& rng) {
@@ -130,17 +93,7 @@ int resolve_radius_from_coarseness_range(const vibble::weighted_range::WeightedI
 }
 
 std::pair<int, int> resolve_coarseness_bounds(const vibble::weighted_range::WeightedIntRange& range) {
-    const std::int64_t span = std::llabs(range.span);
-    std::int64_t min_value = range.center - span;
-    std::int64_t max_value = range.center + span;
-    if (min_value > max_value) {
-        std::swap(min_value, max_value);
-    }
-    min_value = std::max<std::int64_t>(0, min_value);
-    max_value = std::max<std::int64_t>(0, max_value);
-    max_value = std::min<std::int64_t>(max_value, static_cast<std::int64_t>(std::numeric_limits<int>::max()));
-    min_value = std::min<std::int64_t>(min_value, max_value);
-    return {static_cast<int>(min_value), static_cast<int>(max_value)};
+    return vibble::coarseness::bounds(range);
 }
 
 std::vector<SDL_Point> sanitize_points(const std::vector<SDL_Point>& input) {
@@ -525,6 +478,11 @@ double paths_area_abs(const Clipper2Lib::PathsD& paths) {
     return total;
 }
 
+Area make_area_from_points(const CoarsenessGeometryItem& item,
+                           const std::vector<SDL_Point>& points,
+                           const std::string& fallback_name,
+                           int resolution);
+
 std::vector<SDL_Point> largest_valid_path_points(const Clipper2Lib::PathsD& paths,
                                                  int resolution,
                                                  const std::string& label,
@@ -546,6 +504,34 @@ std::vector<SDL_Point> largest_valid_path_points(const Clipper2Lib::PathsD& path
         }
     }
     return best;
+}
+
+std::vector<Area> valid_path_areas(const Clipper2Lib::PathsD& paths,
+                                   int resolution,
+                                   const std::string& label,
+                                   const std::string& identifier,
+                                   const CoarsenessGeometryItem& item) {
+    std::vector<Area> out;
+    out.reserve(paths.size());
+    int path_index = 0;
+    for (const auto& path : paths) {
+        std::vector<SDL_Point> candidate = to_points(path, resolution);
+        const ValidationResult validation = validate_polygon_points(candidate);
+        if (!validation.valid) {
+            vibble::log::debug("[Coarseness] " + identifier + " skipped invalid " + label +
+                               " path: " + validation.reason);
+            ++path_index;
+            continue;
+        }
+        Area area = make_area_from_points(item,
+                                          candidate,
+                                          item.identifier + "_" + label + "_" + std::to_string(path_index),
+                                          resolution);
+        area.set_name(item.identifier + "_" + label + "_" + std::to_string(path_index));
+        out.push_back(std::move(area));
+        ++path_index;
+    }
+    return out;
 }
 
 bool validate_paths(const Clipper2Lib::PathsD& paths,
@@ -648,63 +634,8 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             continue;
         }
 
-        const double preferred_spacing = std::clamp(static_cast<double>(std::max(6, range_max / 3)), 10.0, 72.0);
-        const int sample_count = std::clamp(static_cast<int>(std::lround(perimeter / preferred_spacing)), 24, 4096);
-        std::vector<Vec2> samples = sample_perimeter_evenly(original_boundary, sample_count);
-        if (samples.size() < 3) {
-            vibble::log::debug("[Coarseness] skipped '" + item.identifier + "': failed perimeter sampling");
-            results.push_back(std::move(result));
-            continue;
-        }
-
-        const bool original_is_ccw = signed_area(original_boundary) > 0.0;
-        std::vector<Vec2> normals = outward_normals_from_samples(samples, original_is_ccw);
-
         const int grid_step = std::max(1, vibble::grid::delta(resolution));
-        double min_shell_offset = static_cast<double>(std::max(1, range_min));
-        min_shell_offset = std::max(min_shell_offset, static_cast<double>(grid_step) * 0.75);
-        min_shell_offset = std::min(min_shell_offset, static_cast<double>(range_max));
-        min_shell_offset = std::max(min_shell_offset, 1.0);
-
-        std::uint64_t seed = item.deterministic_seed;
-        if (seed == 0) {
-            seed = kDefaultDeterministicSeed;
-        }
-        seed = mix_u64(seed, static_cast<std::uint64_t>(std::hash<std::string>{}(item.identifier)));
-        seed = mix_u64(seed, hash_points(original_boundary));
-        std::seed_seq seq{
-            static_cast<std::uint32_t>(seed & 0xffffffffULL),
-            static_cast<std::uint32_t>((seed >> 32U) & 0xffffffffULL),
-            static_cast<std::uint32_t>(static_cast<std::uint64_t>(range_min)),
-            static_cast<std::uint32_t>(static_cast<std::uint64_t>(range_max)),
-        };
-        std::mt19937 rng(seq);
-
-        std::vector<double> noisy_offsets = build_noisy_offsets(
-            sample_count, *item.coarseness_range, rng, min_shell_offset, static_cast<double>(range_max));
-        if (noisy_offsets.size() != samples.size()) {
-            vibble::log::debug("[Coarseness] skipped '" + item.identifier + "': failed noisy offset generation");
-            results.push_back(std::move(result));
-            continue;
-        }
-
-        std::vector<double> base_offsets(samples.size(), min_shell_offset);
-        std::vector<SDL_Point> base_shell_points =
-            expand_contour_from_samples(samples, normals, base_offsets, resolution, 0);
-        std::vector<SDL_Point> noisy_shell_points =
-            expand_contour_from_samples(samples, normals, noisy_offsets, resolution, 1);
-
-        const ValidationResult base_validation = validate_polygon_points(base_shell_points);
-        const ValidationResult noisy_validation = validate_polygon_points(noisy_shell_points);
-        if (!base_validation.valid && !noisy_validation.valid) {
-            vibble::log::debug("[Coarseness] skipped '" + item.identifier +
-                               "': invalid base and noisy shells base=" + base_validation.reason +
-                               " noisy=" + noisy_validation.reason);
-            results.push_back(std::move(result));
-            continue;
-        }
-
-        Clipper2Lib::PathsD active_paths = to_paths(original_boundary);
+        const double expansion_radius = std::max(static_cast<double>(range_max), static_cast<double>(grid_step));
         const Clipper2Lib::PathsD original_paths = to_paths(original_boundary);
         const double original_area = original.get_area();
         vibble::log::debug("[Coarseness] processing '" + item.identifier + "' range=" +
@@ -712,29 +643,20 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
                            " original_area=" + std::to_string(original_area) +
                            " original_bounds=" + bounds_to_string(original.get_bounds()) +
                            " resolution=" + std::to_string(resolution) +
-                           " sample_count=" + std::to_string(sample_count));
+                           " expansion_radius=" + std::to_string(expansion_radius));
 
-        if (base_validation.valid) {
-            try {
-                active_paths = Clipper2Lib::Union(active_paths,
-                                                  to_paths(base_shell_points),
-                                                  Clipper2Lib::FillRule::NonZero,
-                                                  2);
-            } catch (const std::exception& ex) {
-                vibble::log::warn("[Coarseness] Boolean union failed for '" + item.identifier +
-                                  "' base shell: " + ex.what());
-            }
-        }
-        if (noisy_validation.valid) {
-            try {
-                active_paths = Clipper2Lib::Union(active_paths,
-                                                  to_paths(noisy_shell_points),
-                                                  Clipper2Lib::FillRule::NonZero,
-                                                  2);
-            } catch (const std::exception& ex) {
-                vibble::log::warn("[Coarseness] Boolean union failed for '" + item.identifier +
-                                  "' noisy shell: " + ex.what());
-            }
+        Clipper2Lib::PathsD active_paths;
+        try {
+            active_paths = Clipper2Lib::InflatePaths(original_paths,
+                                                     expansion_radius,
+                                                     Clipper2Lib::JoinType::Round,
+                                                     Clipper2Lib::EndType::Polygon,
+                                                     2.0,
+                                                     std::max(0.5, static_cast<double>(grid_step) * 0.5));
+        } catch (const std::exception& ex) {
+            vibble::log::warn("[Coarseness] Offset expansion failed for '" + item.identifier + "': " + ex.what());
+            results.push_back(std::move(result));
+            continue;
         }
 
         if (!validate_paths(active_paths, resolution, "expanded_union", item.identifier)) {
@@ -758,40 +680,54 @@ std::vector<CoarsenessExpansionResult> apply_coarseness_pass(const std::vector<C
             continue;
         }
 
-        const std::vector<SDL_Point> expanded_points =
-            largest_valid_path_points(active_paths, resolution, "expanded", item.identifier);
-        if (expanded_points.empty()) {
+        result.expanded_areas = valid_path_areas(active_paths, resolution, "expanded", item.identifier, item);
+        result.soft_boundary_areas = valid_path_areas(expansion_paths, resolution, "soft_boundary", item.identifier, item);
+        if (result.expanded_areas.empty()) {
             vibble::log::debug("[Coarseness] '" + item.identifier + "' rejected final expanded geometry: no valid path");
             results.push_back(std::move(result));
             continue;
         }
 
-        Area expanded = make_area_from_points(item, expanded_points, item.identifier, resolution);
+        auto largest_area_it = std::max_element(result.expanded_areas.begin(),
+                                                result.expanded_areas.end(),
+                                                [](const Area& a, const Area& b) {
+                                                    return a.get_area() < b.get_area();
+                                                });
+        Area expanded = *largest_area_it;
+        expanded.set_name(item.identifier);
         const double before_area = original.get_area();
         const double after_area = expanded.get_area();
+        result.base_area = std::make_unique<Area>(original);
+        result.expanded_area = std::make_unique<Area>(expanded);
         *item.geometry = expanded;
 
-        const std::vector<SDL_Point> expansion_points =
-            largest_valid_path_points(expansion_paths, resolution, "expansion", item.identifier);
-        if (!expansion_points.empty()) {
-            result.expansion_area = std::make_unique<Area>(item.identifier + "_coarse_added", expansion_points, resolution);
-            result.expansion_area->set_type(item.geometry->get_type());
+        if (!result.soft_boundary_areas.empty()) {
+            auto largest_soft_it = std::max_element(result.soft_boundary_areas.begin(),
+                                                    result.soft_boundary_areas.end(),
+                                                    [](const Area& a, const Area& b) {
+                                                        return a.get_area() < b.get_area();
+                                                    });
+            result.expansion_area = std::make_unique<Area>(*largest_soft_it);
+            result.expansion_area->set_name(item.identifier + "_coarse_added");
         }
 
-        result.circles_attempted = sample_count;
-        result.circles_applied = noisy_validation.valid ? sample_count : 0;
-        result.circles_skipped = noisy_validation.valid ? 0 : sample_count;
-        result.circle_intersections_succeeded = sample_count;
+        result.perimeter_samples = std::clamp(static_cast<int>(std::lround(perimeter / std::max(1.0, expansion_radius))),
+                                              1,
+                                              4096);
+        result.expanded_paths = static_cast<int>(result.expanded_areas.size());
+        result.soft_boundary_paths = static_cast<int>(result.soft_boundary_areas.size());
         result.uncovered_perimeter_segments = 0;
-        const double expansion_area = result.expansion_area ? result.expansion_area->get_area() : 0.0;
-        result.expanded_area_size = expansion_area;
+        result.expanded_area_size = paths_area_abs(active_paths);
+        result.soft_boundary_area_size = paths_area_abs(expansion_paths);
         vibble::log::debug("[Coarseness] '" + item.identifier + "' geometry area before=" + std::to_string(before_area) +
                            " after=" + std::to_string(after_area) +
-                           " expansion_area=" + std::to_string(expansion_area));
+                           " expanded_paths=" + std::to_string(result.expanded_paths) +
+                           " soft_boundary_paths=" + std::to_string(result.soft_boundary_paths) +
+                           " soft_boundary_area=" + std::to_string(result.soft_boundary_area_size));
         vibble::log::debug("[Coarseness] '" + item.identifier + "' validation perimeter_length_processed=" +
                            std::to_string(result.perimeter_length_processed) +
-                           " sample_count=" + std::to_string(sample_count) +
-                           " min_shell_offset=" + std::to_string(min_shell_offset) +
+                           " perimeter_samples=" + std::to_string(result.perimeter_samples) +
+                           " expansion_radius=" + std::to_string(expansion_radius) +
                            " expanded_area_size=" + std::to_string(result.expanded_area_size) +
                            " final_expanded_bounds=" + bounds_to_string(item.geometry->get_bounds()));
 
@@ -829,7 +765,16 @@ void apply_coarseness_expansion(std::vector<Room*>& rooms, std::uint64_t determi
     const std::size_t count = std::min(results.size(), item_rooms.size());
     for (std::size_t i = 0; i < count; ++i) {
         if (!item_rooms[i]) continue;
-        item_rooms[i]->coarseness_added_area = std::move(results[i].expansion_area);
+        Room* room = item_rooms[i];
+        if (results[i].base_area) {
+            room->base_room_area = std::move(results[i].base_area);
+        } else if (!room->base_room_area && room->room_area) {
+            room->base_room_area = std::make_unique<Area>(*room->room_area);
+        }
+        room->coarseness_expanded_area = std::move(results[i].expanded_area);
+        room->coarseness_added_area = std::move(results[i].expansion_area);
+        room->coarseness_expanded_areas = std::move(results[i].expanded_areas);
+        room->coarseness_soft_boundary_areas = std::move(results[i].soft_boundary_areas);
     }
 }
 

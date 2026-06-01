@@ -321,7 +321,7 @@ std::optional<Area> AssetSpawner::asset_footprint_area(const Asset& asset, const
 void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                                 const Area& expanded_area,
                                                 const Area& original_area,
-                                                const std::vector<Area>& original_spawn_exclusion_areas,
+                                                const std::vector<Area>& final_spawn_exclusion_areas,
                                                 const nlohmann::json& edge_detail_candidates,
                                                 std::vector<Area>& claimed_edge_detail_regions) {
         if (!asset_library_ || !room.room_area) {
@@ -411,19 +411,37 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                         edge_checker.reset_session();
                         continue;
                 }
-                std::shuffle(expansion_vertices.begin(), expansion_vertices.end(), rng_);
+                std::sort(expansion_vertices.begin(),
+                          expansion_vertices.end(),
+                          [](const auto* a, const auto* b) {
+                              if (!a || !b) return b != nullptr;
+                              if (a->world.y != b->world.y) return a->world.y < b->world.y;
+                              return a->world.x < b->world.x;
+                          });
+
+                double coverage_density = edge_detail_candidates.value("coverage_density", 1.0);
+                if (!std::isfinite(coverage_density)) {
+                        coverage_density = 1.0;
+                }
+                coverage_density = std::clamp(coverage_density, 0.05, 1.0);
+                const int coverage_stride = std::max(1, static_cast<int>(std::lround(1.0 / coverage_density)));
+                int coverage_cursor = 0;
 
                 for (auto* vertex : expansion_vertices) {
                         if (!vertex) {
                                 continue;
                         }
+                        if ((coverage_cursor++ % coverage_stride) != 0) {
+                                occupancy.set_occupied(vertex, true);
+                                continue;
+                        }
                         const SDL_Point spawn_pos = vertex->world;
                         const bool inside_other_original =
-                            std::any_of(original_spawn_exclusion_areas.begin(),
-                                        original_spawn_exclusion_areas.end(),
-                                        [&](const Area& other_original) {
-                                            return area_has_points(other_original) &&
-                                                   other_original.contains_point(spawn_pos);
+                            std::any_of(final_spawn_exclusion_areas.begin(),
+                                        final_spawn_exclusion_areas.end(),
+                                        [&](const Area& other_final) {
+                                            return area_has_points(other_final) &&
+                                                   other_final.contains_point(spawn_pos);
                                         });
                         if (inside_other_original) {
                                 ++skipped_overlap_regions;
@@ -490,10 +508,10 @@ void AssetSpawner::spawn_edge_detail_candidates(Room& room,
                                 }
 
                                 std::string rejection_reason;
-                                if (footprint->intersects(original_area)) {
+                                if (areas_overlap_precisely(*footprint, original_area)) {
                                         rejection_reason = "intersects-original-pre-coarseness-area";
-                                } else if (intersects_any_area_precisely(*footprint, original_spawn_exclusion_areas)) {
-                                        rejection_reason = "intersects-another-room-or-trail-original-area";
+                                } else if (intersects_any_area_precisely(*footprint, final_spawn_exclusion_areas)) {
+                                        rejection_reason = "intersects-another-room-or-trail-final-area";
                                         ++skipped_overlap_regions;
                                 } else if (intersects_any_area_precisely(*footprint, exclusion_zones)) {
                                         rejection_reason = "overlaps-normal-spawned-asset";

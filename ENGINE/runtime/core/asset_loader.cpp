@@ -343,6 +343,7 @@ void AssetLoader::loadRooms() {
                 std::vector<Area> normal_spawned_occupancy;
                 auto add_asset_claim = [&normal_spawned_occupancy](Asset* asset) {
                         if (!asset) return;
+                        if (asset->spawn_method == "EdgeDetail") return;
                         std::optional<Area> footprint = AssetSpawner::asset_footprint_area(*asset, "normal_asset_footprint");
                         if (footprint) {
                                 normal_spawned_occupancy.push_back(*footprint);
@@ -359,6 +360,25 @@ void AssetLoader::loadRooms() {
                 const std::uint64_t coarseness_seed = build_map_coarseness_seed(map_id_, map_manifest_json_);
                 vibble::mapgen::coarseness::apply_coarseness_expansion(rooms, coarseness_seed);
 
+                std::unordered_map<Room*, std::vector<Area>> final_room_areas;
+                final_room_areas.reserve(rooms.size());
+                for (Room* room : rooms) {
+                        if (!room) continue;
+                        auto& room_assets = room->assets;
+                        room_assets.erase(std::remove_if(room_assets.begin(),
+                                                         room_assets.end(),
+                                                         [](const std::unique_ptr<Asset>& asset) {
+                                                             return asset && asset->spawn_method == "EdgeDetail";
+                                                         }),
+                                          room_assets.end());
+                        auto& finals = final_room_areas[room];
+                        if (!room->coarseness_expanded_areas.empty()) {
+                                finals = room->coarseness_expanded_areas;
+                        } else if (room->room_area) {
+                                finals.push_back(*room->room_area);
+                        }
+                }
+
                 const nlohmann::json* edge_detail_candidates = nullptr;
                 auto edge_detail_it = map_manifest_json_.find("edge_detail_candidates");
                 if (edge_detail_it != map_manifest_json_.end() && edge_detail_it->is_object()) {
@@ -367,30 +387,37 @@ void AssetLoader::loadRooms() {
 
                 std::vector<Area> edge_detail_claimed;
                 for (Room* room : rooms) {
-                        if (!room || !room->coarseness_added_area || !edge_detail_candidates) continue;
-                        if (room->coarseness_added_area->get_points().empty() || room->coarseness_added_area->get_area() <= 0.0) {
+                        if (!room || !edge_detail_candidates || room->coarseness_soft_boundary_areas.empty()) continue;
+                        if (!room->base_room_area && !room->room_area) {
                                 continue;
                         }
                         auto original_it = original_room_areas.find(room);
                         const Area& original_area = original_it != original_room_areas.end()
                             ? original_it->second
                             : *room->room_area;
-                        std::vector<Area> other_original_areas;
-                        other_original_areas.reserve(original_room_areas.size());
-                        for (const auto& [other_room, other_area] : original_room_areas) {
-                                if (other_room && other_room != room) {
-                                        other_original_areas.push_back(other_area);
+                        std::vector<Area> other_final_areas;
+                        for (const auto& [other_room, other_areas] : final_room_areas) {
+                                if (!other_room || other_room == room) {
+                                        continue;
+                                }
+                                for (const Area& other_area : other_areas) {
+                                        other_final_areas.push_back(other_area);
                                 }
                         }
 
-                        AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
-                        edge_spawner.set_map_grid_settings(room->map_grid_settings());
-                        edge_spawner.spawn_edge_detail_candidates(*room,
-                                                                  *room->room_area,
-                                                                  original_area,
-                                                                  other_original_areas,
-                                                                  *edge_detail_candidates,
-                                                                  edge_detail_claimed);
+                        for (const Area& soft_boundary_area : room->coarseness_soft_boundary_areas) {
+                                if (soft_boundary_area.get_points().empty() || soft_boundary_area.get_area() <= 0.0) {
+                                        continue;
+                                }
+                                AssetSpawner edge_spawner(asset_library_, normal_spawned_occupancy);
+                                edge_spawner.set_map_grid_settings(room->map_grid_settings());
+                                edge_spawner.spawn_edge_detail_candidates(*room,
+                                                                          soft_boundary_area,
+                                                                          original_area,
+                                                                          other_final_areas,
+                                                                          *edge_detail_candidates,
+                                                                          edge_detail_claimed);
+                        }
                 }
         }
         if (getRooms().empty()) {

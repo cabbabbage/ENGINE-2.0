@@ -25,7 +25,7 @@ class AssetSpawner {
     void spawn_edge_detail_candidates(Room& room,
                                      const Area& expanded_area,
                                      const Area& original_area,
-                                     const std::vector<Area>& original_spawn_exclusion_areas,
+                                     const std::vector<Area>& final_spawn_exclusion_areas,
                                      const nlohmann::json& edge_detail_candidates,
                                      std::vector<Area>& claimed_edge_detail_regions);
     static std::optional<Area> asset_footprint_area(const Asset& asset, const std::string& name = "asset_footprint");

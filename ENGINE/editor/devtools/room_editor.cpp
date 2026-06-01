@@ -3064,6 +3064,7 @@ void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
     if (room_cfg_ui_) {
         room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
             room_config_panel_visible_ = visible;
+            room_config_dock_open_ = visible;
             refresh_docked_panel_open_state();
             if (header_visibility_callback_) {
 
@@ -7898,6 +7899,16 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
 
 bool RoomEditor::is_spawn_group_panel_visible() const {
     return spawn_group_panel_ && spawn_group_panel_->is_visible();
+}
+
+bool RoomEditor::is_right_docked_panel_visible() const {
+    const bool spawn_group_panel_open =
+        spawn_group_panel_ && spawn_group_panel_->is_visible() &&
+        spawn_group_container_ && spawn_group_container_->is_visible();
+    return (room_cfg_ui_ && room_cfg_ui_->visible()) ||
+           spawn_group_panel_open ||
+           is_asset_info_modal_blocking() ||
+           is_camera_settings_open();
 }
 
 void RoomEditor::set_blocking_panel_visible(BlockingPanel panel, bool visible) {
@@ -25754,6 +25765,7 @@ void RoomEditor::ensure_room_configurator() {
     room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
         room_config_panel_visible_ = visible;
         room_config_dock_open_ = visible;
+        refresh_docked_panel_open_state();
         if (header_visibility_callback_) {
             header_visibility_callback_(false);
         }
@@ -25845,6 +25857,15 @@ void RoomEditor::ensure_spawn_group_config_ui() {
         spawn_group_container_->set_scrollbar_visible(true);
         spawn_group_container_->set_content_clip_enabled(true);
         spawn_group_container_->set_blocks_editor_interactions(false);
+        spawn_group_container_->set_header_visibility_controller([this](bool visible) {
+            if (!visible && spawn_group_panel_) {
+                spawn_group_panel_->set_visible(false);
+            }
+            refresh_docked_panel_open_state();
+            if (header_visibility_callback_) {
+                header_visibility_callback_(false);
+            }
+        });
         spawn_group_container_->set_panel_bounds_override(room_config_bounds_);
         spawn_group_container_->set_on_close([this]() {
             if (spawn_group_panel_ && spawn_group_panel_->is_visible()) {
@@ -25939,10 +25960,7 @@ void RoomEditor::refresh_room_config_visibility() {
 }
 
 void RoomEditor::refresh_docked_panel_open_state() {
-    const bool room_right_docked_open =
-        (enabled_ && room_config_panel_visible_) ||
-        (enabled_ && is_asset_info_modal_blocking()) ||
-        (enabled_ && is_camera_settings_open());
+    const bool room_right_docked_open = enabled_ && is_right_docked_panel_visible();
     devmode::docked_panels::set_qualifying_panel_open("room_editor_right_panels", room_right_docked_open);
 }
 
@@ -27632,6 +27650,7 @@ void RoomEditor::open_spawn_group_config_panel(const std::string& spawn_id, std:
         spawn_group_container_->reset_scroll();
         spawn_group_container_->open();
     }
+    refresh_docked_panel_open_state();
 }
 
 void RoomEditor::focus_camera_on_spawn_group(const std::string& spawn_id) {

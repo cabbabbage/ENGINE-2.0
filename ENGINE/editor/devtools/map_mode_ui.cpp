@@ -782,6 +782,7 @@ void MapModeUI::ensure_panels() {
 
         rooms_list_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
+            this->refresh_docked_panel_open_state();
         });
     }
     if (!rooms_display_) {
@@ -810,6 +811,7 @@ void MapModeUI::ensure_panels() {
 
         layer_controls_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
+            this->refresh_docked_panel_open_state();
         });
     }
     if (!layer_controls_display_) {
@@ -1346,6 +1348,12 @@ bool MapModeUI::is_point_inside(int x, int y) const {
     return false;
 }
 
+bool MapModeUI::is_sliding_panel_visible() const {
+    return (room_config_container_ && room_config_container_->is_visible()) ||
+           (rooms_list_container_ && rooms_list_container_->is_visible()) ||
+           (layer_controls_container_ && layer_controls_container_->is_visible());
+}
+
 bool MapModeUI::is_any_panel_visible() const {
     for (DockableCollapsible* panel : floating_panels_) {
         if (!panel) continue;
@@ -1355,8 +1363,7 @@ bool MapModeUI::is_any_panel_visible() const {
         }
         if (panel->is_visible()) return true;
     }
-    if (rooms_list_container_ && rooms_list_container_->is_visible()) return true;
-    if (layer_controls_container_ && layer_controls_container_->is_visible()) return true;
+    if (is_sliding_panel_visible()) return true;
     return layers_panel_ && layers_panel_->is_visible();
 }
 

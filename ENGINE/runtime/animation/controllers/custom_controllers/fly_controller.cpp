@@ -2,16 +2,17 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack.hpp"
+#include "animation/controllers/shared/enemy_archetype_controller.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "utils/input.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
 
-constexpr int kAggressiveContactDamageCooldownFrames = 18;
 
 axis::WorldPos orbit_target_for_angle(const axis::WorldPos& center,
                                       float angle,
@@ -69,8 +70,9 @@ void fly_controller::on_update(const Input& in) {
             --contact_damage_cooldown_frames_;
         }
         if (ctx.room_flies_aggressive() && contact_damage_cooldown_frames_ == 0) {
+            const auto preset = custom_controller_api::enemy_archetypes::EnemyArchetypePresets::aggressive_fly();
             if (apply_attack_hits_to_active_targets()) {
-                contact_damage_cooldown_frames_ = kAggressiveContactDamageCooldownFrames;
+                contact_damage_cooldown_frames_ = std::max(1, preset.cooldown_frames);
             }
         }
         return;

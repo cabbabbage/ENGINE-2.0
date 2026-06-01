@@ -49,5 +49,10 @@ struct MovementGoalResult {
 const char* movement_goal_kind_name(MovementGoalKind kind);
 const char* movement_goal_status_name(MovementGoalStatus status);
 bool materially_same_goal(const MovementGoal& lhs, const MovementGoal& rhs);
+MovementGoalResult evaluate_movement_goal(const MovementGoal& goal,
+                                          const axis::WorldPos& current_position,
+                                          int no_progress_frames);
+bool should_reuse_movement_goal(const MovementGoal& active_goal,
+                                const MovementGoal& requested_goal);
 
 } // namespace animation_update::custom_controllers::internal

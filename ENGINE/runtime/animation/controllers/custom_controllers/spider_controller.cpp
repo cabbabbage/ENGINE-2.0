@@ -1,28 +1,16 @@
 #include "spider_controller.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "animation/controllers/shared/enemy_archetype_controller.hpp"
 #include "utils/log.hpp"
 #include <optional>
 
 spider_controller::spider_controller(Asset* self)
     : custom_controller_api::CustomControllerBase(self) {
-    behavior_config_.kamikaze = false;
-    behavior_config_.ranges.aggro_radius_px = 230;
-    behavior_config_.ranges.desired_standoff_px = 8;
-    behavior_config_.ranges.attack_radius_px = 72;
-    behavior_config_.retreat_distance_px = 310;
-    behavior_config_.recover_ms = 520;
-    behavior_config_.attack_window_ms = 220;
-    behavior_config_.return_home_threshold_px = 130;
-    behavior_config_.force_attacking_enabled = true;
-    chase_move_.visit_threshold_px = 12;
-    chase_move_.allow_vertical_movement = false;
-    retreat_move_.visit_threshold_px = 12;
-    retreat_move_.allow_vertical_movement = false;
-    chase_move_.resolution_layer = std::nullopt;
-    retreat_move_.resolution_layer = std::nullopt;
-    chase_move_.override_non_locked = true;
-    retreat_move_.override_non_locked = true;
+    const auto preset = custom_controller_api::enemy_archetypes::EnemyArchetypePresets::spider();
+    behavior_config_ = preset.behavior;
+    chase_move_ = preset.approach_move;
+    retreat_move_ = preset.retreat_move;
     Asset* owner = controller_self();
     if (owner && owner->anim_) {
         owner->anim_->set_debug_enabled(false);
@@ -58,11 +46,14 @@ void spider_controller::on_update(const Input& in) {
         ai_config);
     if (player && last_ai_frame_.attack.manual_attack_allowed) {
         (void)face_target(*player);
+        const auto profile = custom_controller_api::enemy_archetypes::EnemyArchetypePresets::spider().primary_attack;
         (void)try_attack_target(*player,
-                                "spider_primary",
-                                0.55f,
-                                behavior_config_.ranges.attack_radius_px + 24,
-                                "attack_left");
+                                profile.id,
+                                static_cast<float>(profile.cooldown_ms_on_start) / 1000.0f,
+                                profile.max_range_px,
+                                profile.animation_id,
+                                profile.required_tags,
+                                profile.excluded_tags);
     }
 }
 

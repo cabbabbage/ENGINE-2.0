@@ -24,7 +24,7 @@ void davey_controller::on_update(const Input&) {
     }
 
     chase_target(*player);
-    apply_attack_hit(*player);
+    (void)try_attack_target(*player, "davey_primary", 0.8f, 72, "attack");
 }
 
 void davey_controller::on_process_pending_attacks(Asset& self) {

@@ -14,9 +14,9 @@
 namespace animation_update::custom_controllers::internal {
 
 bool ControllerCombatSystem::is_target_in_range(const Asset& self, const Asset& target, int range_px) {
-    const long long dist_sq = EnemyCombatCoordinator::horizontal_distance_sq(self, target);
-    const long long range = std::max(0, range_px);
-    return dist_sq <= (range * range);
+    const EnemyAttackProfile range_profile = EnemyCombatCoordinator::make_legacy_profile(
+        "range_check", 0.0f, range_px, std::string{});
+    return EnemyCombatCoordinator::profile_in_range(range_profile, self, target);
 }
 
 bool ControllerCombatSystem::cooldown_ready(const CooldownState& cooldowns, const std::string& key) {
@@ -104,8 +104,10 @@ bool ControllerCombatSystem::try_attack_target(Asset& self,
         const AttackRequestResult request =
             EnemyCombatCoordinator::commit_startup(self, target, profile);
         const bool committed_to_runtime =
-            self.anim_ && self.anim_->commit_attack_target(target, self.current_animation);
-        start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
+            request.accepted && self.anim_ && self.anim_->commit_attack_target(target, self.current_animation);
+        if (committed_to_runtime) {
+            start_cooldown(cooldowns, cooldown_key, cooldown_seconds);
+        }
         if (self.anim_ && self.anim_->debug_enabled()) {
             vibble::log::info("[AICombat] Enemy attack committed to active-window dispatch profile='" +
                               request.profile.id + "' runtime_commit=" +

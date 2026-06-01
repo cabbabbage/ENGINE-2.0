@@ -29,6 +29,7 @@
 #include "animation_update.hpp"
 #include "animation/animation_tag_utils.hpp"
 #include "animation/attack_validation.hpp"
+#include "animation/controllers/shared/internal/enemy_combat_coordinator.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/transform_smoothing.hpp"
 #include "unstick_utils.hpp"
@@ -556,6 +557,7 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         std::string target_asset_id{};
     } best{};
     bool has_best = false;
+    std::vector<animation_update::custom_controllers::internal::EnemyAttackCandidate> coordinator_candidates;
 
     auto better_choice = [](const RankedChoice& candidate, const RankedChoice& current_best) {
         const int candidate_score = static_cast<int>(candidate.score);
@@ -617,10 +619,31 @@ bool AnimationRuntime::maybe_trigger_attack_on_cycle_boundary() {
         candidate.animation_id = candidate_ranked.animation_id;
         candidate.path_index = candidate_ranked.path_index;
         candidate.target_asset_id = target_id;
+        animation_update::custom_controllers::internal::EnemyAttackCandidate coordinator_candidate{};
+        coordinator_candidate.profile = animation_update::custom_controllers::internal::EnemyCombatCoordinator::make_legacy_profile(
+            candidate_ranked.animation_id,
+            0.0f,
+            0,
+            candidate_ranked.animation_id);
+        coordinator_candidate.window_score = candidate_ranked.evaluation.score;
+        coordinator_candidate.facing_score = facing_score;
+        coordinator_candidate.target_id = target_id;
+        coordinator_candidate.path_index = candidate_ranked.path_index;
+        coordinator_candidates.push_back(std::move(coordinator_candidate));
         if (!has_best || better_choice(candidate, best)) {
             best = std::move(candidate);
             has_best = true;
         }
+    }
+
+    if (const auto coordinator_best = animation_update::custom_controllers::internal::EnemyCombatCoordinator::select_best_candidate(coordinator_candidates)) {
+        best.animation_id = coordinator_best->profile.animation_id;
+        best.path_index = coordinator_best->path_index;
+        best.target_asset_id = coordinator_best->target_id;
+        best.score = coordinator_best->window_score;
+        best.facing_score = coordinator_best->facing_score;
+        has_best = true;
+        runtime_stats::FrameStatsRecorder::instance().set("enemy_ai.attack_profile", coordinator_best->profile.id);
     }
 
     if (!has_best || best.animation_id.empty() || best.target_asset_id.empty()) {

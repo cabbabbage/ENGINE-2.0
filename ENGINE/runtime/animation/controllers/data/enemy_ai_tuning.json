@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "melee_chaser": {
+    "spider": {
+      "aggro_radius_px": 230,
+      "desired_standoff_px": 8,
+      "attack_radius_px": 72,
+      "retreat_distance_px": 310,
+      "recover_ms": 520,
+      "attack_window_ms": 220,
+      "primary_attack": {
+        "id": "spider_primary",
+        "animation_id": "attack_left",
+        "range_px": 96,
+        "cooldown_ms_on_start": 550,
+        "cooldown_ms_on_hit": 550,
+        "cooldown_ms_on_whiff": 550,
+        "allow_contact_fallback": false
+      }
+    },
+    "boneski": {
+      "aggro_radius_px": 240,
+      "desired_standoff_px": 10,
+      "attack_radius_px": 74,
+      "retreat_distance_px": 220,
+      "recover_ms": 430,
+      "attack_window_ms": 220,
+      "primary_attack": {
+        "id": "boneski_primary",
+        "animation_id": "attack_right",
+        "range_px": 98,
+        "cooldown_ms_on_start": 700,
+        "cooldown_ms_on_hit": 700,
+        "cooldown_ms_on_whiff": 700,
+        "allow_contact_fallback": false
+      }
+    }
+  },
+  "exploder": {
+    "bomb": {
+      "trigger_radius_px": 42,
+      "arming_frames": 8,
+      "active_frames": 2,
+      "explosion_radius_px": 130,
+      "damage": 70
+    }
+  },
+  "contact_hazard": {
+    "fly": {
+      "contact_damage_cooldown_frames": 18,
+      "allow_contact_fallback": true
+    }
+  },
+  "skittish_critter": {
+    "frog": {
+      "threat_range_px": 96,
+      "safe_distance_px": 220,
+      "random_step_min_px": 24,
+      "random_step_max_px": 72
+    }
+  }
+}

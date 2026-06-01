@@ -162,6 +162,18 @@ target_include_directories(enemy_attack_cycle_regression_test PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
 )
 
+add_executable(enemy_ai_layers_regression_test
+    ${CMAKE_SOURCE_DIR}/ENGINE/tests/enemy_ai_layers_regression_test.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/animation/controllers/shared/internal/enemy_movement_goal.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/animation/controllers/shared/internal/enemy_positioning_system.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/animation/navigation/enemy_navigation_system.cpp
+)
+target_include_directories(enemy_ai_layers_regression_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+)
+
+
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
 if(ENABLE_UNITY_BUILD)

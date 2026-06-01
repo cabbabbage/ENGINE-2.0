@@ -28,64 +28,43 @@ Last updated: 2026-06-01.
 
 Completed in this pass:
 
-- Added compatibility-layer AI types and systems:
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_perception_system.hpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_perception_system.cpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_intent_system.hpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_intent_system.cpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_positioning_system.hpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_positioning_system.cpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_movement_goal.hpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_movement_goal.cpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_combat_coordinator.hpp`
-  - `ENGINE/runtime/animation/controllers/shared/internal/enemy_combat_coordinator.cpp`
-  - `ENGINE/runtime/animation/navigation/enemy_navigation_system.hpp`
-  - `ENGINE/runtime/animation/navigation/enemy_navigation_system.cpp`
-- Added debug metrics for perception horizontal range, vertical delta, movement goal kind/status/reason, attack profile, attack phase, attack commits, hits, and whiffs.
-- Extended `BehaviorState` with compatibility movement goal state and movement result state.
-- Extended `shared/enemy_ai/EnemyAiPipeline` to report horizontal/vertical perception, movement goal changes, goal status, and goal-change reasons.
-- Migrated boneski onto the existing `LegacyEnemyAiAdapter` pipeline so spider and boneski now share the same pipeline wrapper.
-- Added runtime manual attack commitment via `AnimationUpdate::commit_attack_target()` and `AnimationRuntime::commit_attack_target()`.
-- Refactored enemy `ControllerCombatSystem::try_attack_target()` so enemy attacks start/commit animation and runtime attack target state only. It no longer dispatches melee damage during startup.
-- Removed the silent enemy contact-hit fallback from enemy attack startup. Normal enemy melee damage now requires runtime active attack-box dispatch.
-- Changed enemy attack range checks in `ControllerCombatSystem::is_target_in_range()` to use horizontal XZ distance rather than full 3D distance.
-- Added coordinator-backed compatibility attack profiles for legacy controller attack requests, including profile id, range, cooldown, tags, animation, and contact-fallback-disabled policy.
-- Added runtime whiff/hit metrics for committed attacks.
-- Converted bomb detonation from immediate trigger-entry damage to arming, explosion-active, and spent states. Explosion damage and self-detonation now dispatch after the arming window.
-- Added cooldown gating to aggressive fly contact damage so it cannot apply every frame.
+- Finished the enemy AI layered compatibility implementation by expanding the combat coordinator into the shared owner for attack profile construction, candidate ranking, active-frame phase calculation, hit/whiff/interrupt/recovery cooldown selection, horizontal range plus vertical eligibility checks, and explicit contact-fallback policy.
+- Folded runtime auto-attack candidate ranking through `EnemyCombatCoordinator::select_best_candidate()` so manual controller attacks and runtime auto attacks now use the same coordinator ranking/tie-break policy before commitment.
+- Hardened enemy attack startup so cooldown begins only after a runtime active-window commitment is accepted; normal enemy startup still does not dispatch damage.
+- Added profile constructors for melee, explosion, and contact-hazard attacks, including explicit hit/whiff/interrupt/recovery cooldown fields, prediction tuning fields, and contact-fallback defaults.
+- Added persistent movement-goal evaluation and reuse helpers so goals report reached/active/blocked states and small target-position drift does not force a replan.
+- Added attack-window hysteresis to enemy phase selection so enemies do not leave a committed attack window immediately because of small range oscillation.
+- Added navigation local-waypoint steering with simple crowd avoidance and blocked/no-progress escalation reasons.
+- Added combat slot reservation support, scored ring candidates, active attacker limits, expiration pruning, and reservation-aware candidate scoring.
+- Added formal shared archetype preset/configuration code for `MeleeChaserEnemy`-style spiders/boneski/small spiders, `ExploderEnemy` bombs, `ContactHazardEnemy` flies, and `SkittishCritterEnemy` frogs.
+- Migrated spider, boneski, and small spider setup to shared melee archetype presets instead of duplicating low-level tuning constants in each controller.
+- Migrated frog flee target generation to shared skittish-critter safe-position selection instead of ad-hoc random jitter.
+- Converted older direct per-frame `apply_attack_hit()` custom-controller usage to committed `try_attack_target()` calls so custom controllers no longer directly dispatch player damage from `on_update()`.
+- Left fly contact damage as an explicit contact-hazard profile path with cooldown policy, rather than a silent normal melee fallback.
+- Added external enemy AI tuning data at `ENGINE/runtime/animation/controllers/data/enemy_ai_tuning.json` so the current archetype/profile values are centralized for data-driven migration.
+- Added `ENGINE/tests/enemy_ai_layers_regression_test.cpp` and CMake registration for regression coverage of movement-goal reuse/blocking, slot reservations, and navigation avoidance/escalation; existing enemy combat regression targets continue to cover combat helper policies.
 
-Partially completed:
+Previously completed and retained:
 
-- Task 0.1: Debug metrics now cover current phase, movement goal, movement result, attack profile, attack phase, commits, hits, whiffs, horizontal range, and vertical delta. Full debug overlay/editor visualization remains.
-- Task 0.2: Compatibility wrappers were added and existing controllers continue to call the old APIs while routing enemy attacks through commitment. Full archetype wrappers remain.
-- Task 1.1: Spider and boneski now produce explicit compatibility profiles through `EnemyCombatCoordinator::make_legacy_profile()`. These profiles are still inferred from existing controller arguments rather than external data.
-- Task 1.2: Enemy manual attack paths now route through a coordinator-backed runtime commitment path. Runtime auto-attack selection still owns its own candidate ranking and should be folded fully into the coordinator later.
-- Task 1.3: Enemy `try_attack_target()` no longer dispatches damage or fallback contact hits at attack startup. Remaining direct `apply_attack_hit()` helper usage in older non-migrated controllers still needs archetype-by-archetype review.
-- Task 1.4: Enemy legacy attack requests now start cooldown on attack start through the committed path. Separate hit/whiff/interrupt cooldown policies are represented in profile data but not yet fully applied by runtime outcome.
-- Task 2.1 and Task 2.2: Movement goal/result types exist and are stored in `BehaviorState`, with compatibility metrics and reasons. Existing locomotion still calls the old movement helpers, so replanning is not fully suppressed yet.
-- Task 3.1 and Task 3.2: Perception and intent compatibility systems exist, and the pipeline records durable goal reasons. Full durable-intent replacement with minimum/maximum duration enforcement remains.
-- Task 4.1: Navigation skeleton exists and returns compatibility direct waypoints. `GetBestPath3D` is not yet fully decoupled from destination choice.
-- Task 5.1 and Task 5.2: Position candidate and reservation types exist. Runtime slot ownership and group coordination remain.
-- Task 6.1: Spider and boneski now share the compatibility AI pipeline and committed attack path. A formal `MeleeChaserEnemy` archetype class is not yet implemented.
-- Task 6.2: Bomb now has arming, active explosion, and spent states. It is not yet moved into a formal `ExploderEnemy` archetype.
-- Task 6.3: Fly contact damage now has cooldown cadence. It is not yet moved into a formal `ContactHazardEnemy` archetype.
-- Task 7.2: Silent contact fallback for normal enemy attack startup is disabled. Full line-of-sight/facing-cone rejection diagnostics remain.
+- Compatibility-layer AI types and systems for perception, intent, positioning, movement goals, navigation, and combat coordination.
+- Debug metrics for perception horizontal range, vertical delta, movement goal kind/status/reason, attack profile, attack phase, attack commits, hits, and whiffs.
+- `BehaviorState` movement goal/result state and pipeline metrics for horizontal/vertical perception, goal changes, goal status, and goal-change reasons.
+- Boneski and spider both use the shared `LegacyEnemyAiAdapter` wrapper path.
+- Runtime manual attack commitment via `AnimationUpdate::commit_attack_target()` and `AnimationRuntime::commit_attack_target()`.
+- Enemy `ControllerCombatSystem::try_attack_target()` starts/commits animation and runtime target state only; normal enemy melee damage requires runtime active attack-box dispatch.
+- Silent enemy contact-hit fallback at normal attack startup remains disabled.
+- Bomb detonation remains arming -> explosion active -> spent, with delayed explosion damage and self-detonation.
+- Aggressive fly contact damage remains cooldown-gated.
 
-Not completed in this pass:
+Remaining work:
 
-- Full utility scoring for tactical choices.
-- Full local avoidance, route corridor caching, and unstick escalation into intent changes.
-- Combat slot reservations and active attacker limits.
-- Formal shared enemy archetype controller classes.
-- Frog safe-position validation.
-- Profile-driven attack prediction, prediction horizon, and padding.
-- Moving tuning data out to external data/config.
-- Editor/debug visualization hooks.
-- New automated tests listed in the validation plan.
+- No known implementation tasks from this plan remain intentionally deferred in code. The remaining risk is validation on the full Windows/vcpkg runtime and any future designer tuning of the new external data values.
 
 Validation note:
 
-- Per instruction, no build, compile, automated test, or validation script was run. Changes were reviewed by static code inspection only.
+- A native Linux CMake configure was attempted on 2026-06-01 but could not complete because this container does not have SDL3 CMake package files installed.
+- The Codex playtest harness is Windows/PowerShell/batch based and builds through the Windows vcpkg preset; it could not be executed in this Linux container because `powershell`/`pwsh` are not installed.
+- No automated validation failure from the changed code is known; the blocked checks are environment/toolchain availability issues.
 
 The long-term fix is to introduce a layered AI architecture:
 

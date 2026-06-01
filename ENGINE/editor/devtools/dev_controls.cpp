@@ -3803,7 +3803,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
-    const bool right_docked_open_pre = devmode::docked_panels::any_qualifying_panel_open();
+    const bool right_docked_open_pre =
+        devmode::docked_panels::any_qualifying_panel_open() ||
+        (map_mode_ui_ && map_mode_ui_->is_sliding_panel_visible()) ||
+        (room_editor_ && room_editor_->is_right_docked_panel_visible());
     if (map_mode_ui_) {
         DevFooterBar* footer = map_mode_ui_->get_footer_bar();
         if (footer && footer->visible()) {
@@ -3835,7 +3838,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool right_docked_open = devmode::docked_panels::any_qualifying_panel_open();
+    const bool right_docked_open =
+        devmode::docked_panels::any_qualifying_panel_open() ||
+        (map_mode_ui_ && map_mode_ui_->is_sliding_panel_visible()) ||
+        (room_editor_ && room_editor_->is_right_docked_panel_visible());
     modal_headers_hidden_ = modal_hide;
     const bool hide_headers =
         modal_hide || layers_panel_open ||
@@ -5060,7 +5066,10 @@ void DevControls::apply_header_suppression() {
 
         const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
         const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
-        const bool docked_panel_open = devmode::docked_panels::any_qualifying_panel_open();
+        const bool docked_panel_open =
+            devmode::docked_panels::any_qualifying_panel_open() ||
+            (map_mode_ui_ && map_mode_ui_->is_sliding_panel_visible()) ||
+            (room_editor_ && room_editor_->is_right_docked_panel_visible());
         const bool header_block = modal_hide || shift_block_headers_footers_ || docked_panel_open;
         map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(false);
@@ -5092,7 +5101,10 @@ void DevControls::mark_layout_dirty() {
 void DevControls::update_header_and_footer_bounds() {
     const bool asset_editor_tab_active = room_editor_ && room_editor_->is_asset_editor_tab_scope_active();
     const bool modal_hide = is_modal_blocking_panels() || asset_editor_tab_active;
-    const bool docked_panel_open = devmode::docked_panels::any_qualifying_panel_open();
+    const bool docked_panel_open =
+        devmode::docked_panels::any_qualifying_panel_open() ||
+        (map_mode_ui_ && map_mode_ui_->is_sliding_panel_visible()) ||
+        (room_editor_ && room_editor_->is_right_docked_panel_visible());
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool hide_headers = modal_hide || layers_panel_open || shift_block_headers_footers_ || docked_panel_open;

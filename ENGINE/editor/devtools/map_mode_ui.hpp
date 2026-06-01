@@ -92,6 +92,7 @@ public:
 
     bool is_point_inside(int x, int y) const;
     bool is_any_panel_visible() const;
+    bool is_sliding_panel_visible() const;
     bool is_layers_panel_visible() const;
 
 private:

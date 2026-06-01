@@ -179,6 +179,7 @@ public:
     double get_height_scale_factor() const { return height_scale_factor_; }
 
     bool is_spawn_group_panel_visible() const;
+    bool is_right_docked_panel_visible() const;
 
 protected:
     void handle_spawn_config_change(const nlohmann::json& entry);

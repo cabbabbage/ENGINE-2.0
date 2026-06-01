@@ -42,8 +42,17 @@ void boneski_controller::on_update(const Input& in) {
         player = nullptr;
     }
 
-    run_enemy_behavior(player, behavior_config_, chase_move_, retreat_move_);
-    if (player && behavior_state().mode == custom_controller_api::EnemyAgentPhase::AttackWindow) {
+    custom_controller_api::enemy_ai::EnemyAiPlanConfig ai_config{};
+    ai_config.behavior = behavior_config_;
+    ai_config.approach_move = chase_move_;
+    ai_config.retreat_move = retreat_move_;
+    last_ai_frame_ = custom_controller_api::enemy_ai::LegacyEnemyAiAdapter::tick(
+        *self,
+        player,
+        player != nullptr,
+        behavior_state(),
+        ai_config);
+    if (player && last_ai_frame_.attack.manual_attack_allowed) {
         (void)face_target(*player);
         (void)try_attack_target(*player,
                                 "boneski_primary",

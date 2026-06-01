@@ -19,7 +19,10 @@ struct PerceptionSnapshot {
     bool target_valid = false;
     bool target_in_same_room = false;
     long long target_distance_sq = 0;
+    long long target_horizontal_distance_sq = 0;
+    int target_vertical_delta_px = 0;
     axis::WorldPos self_position{0, 0, 0};
+    axis::WorldPos target_position{0, 0, 0};
     axis::WorldPos home_position{0, 0, 0};
     Clock::time_point now{};
 };
@@ -73,6 +76,8 @@ struct ResultFeedback {
     bool movement_attack_conflict = false;
     bool forced_return_home_fallback = false;
     int no_progress_frames = 0;
+    bool movement_goal_changed = false;
+    std::string movement_goal_reason;
     int attack_window_enter_count = 0;
     int attack_window_exit_count = 0;
     int return_home_fallback_count = 0;

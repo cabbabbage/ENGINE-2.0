@@ -2,6 +2,7 @@
 #define BONESKI_CONTROLLER_HPP
 
 #include "animation/controllers/custom_controller.hpp"
+#include "animation/controllers/shared/enemy_ai/enemy_ai_pipeline.hpp"
 
 class Asset;
 class Input;
@@ -19,6 +20,7 @@ private:
     custom_controller_api::EnemyAgentConfig behavior_config_{};
     custom_controller_api::MovementConfig chase_move_{};
     custom_controller_api::MovementConfig retreat_move_{};
+    custom_controller_api::enemy_ai::EnemyAiFrame last_ai_frame_{};
 };
 
 #endif

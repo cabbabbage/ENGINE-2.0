@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "animation/controllers/shared/controller_types.hpp"
+#include "animation/controllers/shared/internal/enemy_movement_goal.hpp"
 #include "core/axis_convention.hpp"
 
 class Asset;
@@ -33,6 +34,10 @@ struct BehaviorState {
     int return_home_fallback_count = 0;
     int attack_window_enter_count = 0;
     int attack_window_exit_count = 0;
+    MovementGoal active_movement_goal{};
+    MovementGoalResult last_movement_result{};
+    int movement_goal_change_count = 0;
+    std::string last_movement_goal_reason{};
 };
 
 class ControllerAgentSystem {

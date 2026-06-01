@@ -16,6 +16,8 @@ constexpr int kDetonationTriggerRadiusPx = 42;
 constexpr int kExplosionRadiusPx = 130;
 constexpr int kExplosionDamage = 70;
 constexpr float kExplosionHitbackDistancePx = 140.0f;
+constexpr int kDetonationArmingFrames = 8;
+constexpr int kExplosionActiveFrames = 2;
 
 long long distance_sq_3d(const Asset& a, const Asset& b) {
     const long long dx = static_cast<long long>(b.world_x()) - static_cast<long long>(a.world_x());
@@ -58,7 +60,7 @@ void bomb_controller::on_update(const Input& in) {
     if (!self || !self->anim_ || !ctx.has_assets()) {
         return;
     }
-    if (has_detonated_) {
+    if (detonation_state_ == DetonationState::Spent) {
         return;
     }
 
@@ -67,8 +69,28 @@ void bomb_controller::on_update(const Input& in) {
         player = nullptr;
     }
 
+    if (detonation_state_ == DetonationState::Arming) {
+        ++detonation_frames_;
+        if (detonation_frames_ >= kDetonationArmingFrames) {
+            detonation_state_ = DetonationState::ExplosionActive;
+            detonation_frames_ = 0;
+            dispatch_explosion_attacks(*self, player);
+            dispatch_self_detonation(*self);
+        }
+        return;
+    }
+
+    if (detonation_state_ == DetonationState::ExplosionActive) {
+        ++detonation_frames_;
+        if (detonation_frames_ >= kExplosionActiveFrames) {
+            detonation_state_ = DetonationState::Spent;
+            has_detonated_ = true;
+        }
+        return;
+    }
+
     if (player && can_detonate(*self, *player)) {
-        detonate(*self, *player);
+        begin_detonation(*self);
         return;
     }
 
@@ -109,15 +131,16 @@ bool bomb_controller::can_detonate(const Asset& self, const Asset& target) const
     return distance_sq_3d(self, target) <= trigger_sq;
 }
 
-void bomb_controller::detonate(Asset& self, Asset& target) {
-    (void)target;
-    if (has_detonated_) {
+void bomb_controller::begin_detonation(Asset& self) {
+    if (detonation_state_ != DetonationState::Idle) {
         return;
     }
-    has_detonated_ = true;
+    detonation_state_ = DetonationState::Arming;
+    detonation_frames_ = 0;
     (void)start_attack("die", {"attack", "die"});
-    dispatch_explosion_attacks(self, &target);
+}
 
+void bomb_controller::dispatch_self_detonation(Asset& self) {
     animation_update::Attack self_kill{};
     self_kill.attacker_asset_id = animation_update::detail::stable_asset_id(self);
     self_kill.attacker_asset_name = self.info ? self.info->name : std::string{"bomb"};

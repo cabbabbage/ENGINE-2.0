@@ -16,5 +16,6 @@ protected:
 
 private:
     float orbit_angle_radians_ = 0.0f;
+    int contact_damage_cooldown_frames_ = 0;
 
 };

@@ -11,6 +11,8 @@
 
 namespace {
 
+constexpr int kAggressiveContactDamageCooldownFrames = 18;
+
 axis::WorldPos orbit_target_for_angle(const axis::WorldPos& center,
                                       float angle,
                                       int radius,
@@ -63,8 +65,13 @@ void fly_controller::on_update(const Input& in) {
                           ctx.room_flies_aggressive() ? 24 : 10,
                           move_cfg);
 
-        if (ctx.room_flies_aggressive()) {
-            apply_attack_hits_to_active_targets();
+        if (contact_damage_cooldown_frames_ > 0) {
+            --contact_damage_cooldown_frames_;
+        }
+        if (ctx.room_flies_aggressive() && contact_damage_cooldown_frames_ == 0) {
+            if (apply_attack_hits_to_active_targets()) {
+                contact_damage_cooldown_frames_ = kAggressiveContactDamageCooldownFrames;
+            }
         }
         return;
     }

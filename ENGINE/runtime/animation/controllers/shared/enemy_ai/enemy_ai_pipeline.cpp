@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <string>
 
 #include "assets/asset/Asset.hpp"
+#include "animation/animation_update.hpp"
 #include "utils/frame_stats_recorder.hpp"
 #include "utils/log.hpp"
 
@@ -64,6 +66,14 @@ PerceptionSnapshot EnemyAiPipeline::perceive(Asset& self,
     perception.now = now;
     if (perception.target_valid) {
         perception.target_distance_sq = internal::ControllerAgentSystem::distance_sq_3d(self, *target);
+        const long long dx = static_cast<long long>(target->world_x()) -
+                             static_cast<long long>(self.world_x());
+        const long long dz = static_cast<long long>(target->world_z()) -
+                             static_cast<long long>(self.world_z());
+        perception.target_horizontal_distance_sq = (dx * dx) + (dz * dz);
+        perception.target_vertical_delta_px = std::abs(target->world_y() - self.world_y());
+        perception.target_position =
+            axis::WorldPos{target->world_x(), target->world_y(), target->world_z()};
     }
     return perception;
 }
@@ -158,6 +168,49 @@ ResultFeedback EnemyAiPipeline::apply_result_feedback(BehaviorState& state,
     feedback.attempted_approach = intent.phase == EnemyAgentPhase::Approach;
     feedback.movement_attack_conflict = intent.target_should_be_committed && moved;
 
+    internal::MovementGoal next_goal{};
+    next_goal.target_position = perception.target_valid ? perception.target_position : perception.home_position;
+    next_goal.allow_vertical_movement = config.require_ground_contact == false;
+    next_goal.max_no_progress_frames = 45;
+    if (perception.target_valid && perception.target) {
+        const std::string target_id = animation_update::detail::stable_asset_id(*perception.target);
+        if (!target_id.empty()) {
+            next_goal.target_id = target_id;
+        }
+    }
+    switch (intent.phase) {
+    case EnemyAgentPhase::Approach:
+        next_goal.kind = internal::MovementGoalKind::MaintainRange;
+        next_goal.desired_range_px = std::max(0, config.ranges.desired_standoff_px);
+        next_goal.tolerance_px = std::max(0, config.ranges.attack_radius_px - config.ranges.desired_standoff_px);
+        break;
+    case EnemyAgentPhase::Recover:
+        next_goal.kind = internal::MovementGoalKind::RetreatFromTarget;
+        next_goal.desired_range_px = std::max(1, config.retreat_distance_px);
+        next_goal.tolerance_px = 12;
+        break;
+    case EnemyAgentPhase::ReturnHome:
+        next_goal.kind = internal::MovementGoalKind::ReturnHome;
+        next_goal.target_id = std::nullopt;
+        next_goal.target_position = perception.home_position;
+        next_goal.desired_range_px = std::max(0, config.return_home_threshold_px);
+        next_goal.tolerance_px = std::max(0, config.return_home_threshold_px);
+        break;
+    default:
+        next_goal.kind = internal::MovementGoalKind::None;
+        break;
+    }
+
+    if (!internal::materially_same_goal(state.active_movement_goal, next_goal)) {
+        state.active_movement_goal = next_goal;
+        ++state.movement_goal_change_count;
+        state.last_movement_goal_reason = "intent_" + std::string{phase_name(intent.phase)};
+        feedback.movement_goal_changed = true;
+        feedback.movement_goal_reason = state.last_movement_goal_reason;
+    } else {
+        feedback.movement_goal_reason = state.last_movement_goal_reason;
+    }
+
     if (intent.entering_attack_window) {
         ++state.attack_window_enter_count;
         state.attack_window_until =
@@ -190,6 +243,20 @@ ResultFeedback EnemyAiPipeline::apply_result_feedback(BehaviorState& state,
     }
 
     feedback.no_progress_frames = state.no_progress_frames;
+    state.last_movement_result.status =
+        moved ? internal::MovementGoalStatus::Active
+              : (intent.phase == EnemyAgentPhase::Approach && state.no_progress_frames > 0
+                     ? internal::MovementGoalStatus::Blocked
+                     : internal::MovementGoalStatus::Active);
+    if (intent.phase == EnemyAgentPhase::AttackWindow) {
+        state.last_movement_result.status = internal::MovementGoalStatus::Reached;
+    } else if (feedback.forced_return_home_fallback) {
+        state.last_movement_result.status = internal::MovementGoalStatus::Failed;
+    }
+    state.last_movement_result.current_position = perception.self_position;
+    state.last_movement_result.final_destination = state.active_movement_goal.target_position;
+    state.last_movement_result.no_progress_frames = state.no_progress_frames;
+    state.last_movement_result.reason = feedback.movement_goal_reason;
     feedback.attack_window_enter_count = state.attack_window_enter_count;
     feedback.attack_window_exit_count = state.attack_window_exit_count;
     feedback.return_home_fallback_count = state.return_home_fallback_count;
@@ -272,6 +339,17 @@ EnemyAiFrame LegacyEnemyAiAdapter::tick(Asset& self,
     frame_stats.set("enemy_ai.pipeline.route", route_name(frame.navigation.route));
     frame_stats.set("enemy_ai.pipeline.manual_attack_allowed", frame.attack.manual_attack_allowed);
     frame_stats.set("enemy_ai.no_progress_frames", frame.feedback.no_progress_frames);
+    frame_stats.set("enemy_ai.movement_goal.kind",
+                    internal::movement_goal_kind_name(state.active_movement_goal.kind));
+    frame_stats.set("enemy_ai.movement_goal.status",
+                    internal::movement_goal_status_name(state.last_movement_result.status));
+    frame_stats.set("enemy_ai.movement_goal.changed", frame.feedback.movement_goal_changed);
+    frame_stats.set("enemy_ai.movement_goal.change_count", state.movement_goal_change_count);
+    frame_stats.set("enemy_ai.movement_goal.reason", frame.feedback.movement_goal_reason);
+    frame_stats.set("enemy_ai.perception.horizontal_distance_sq",
+                    static_cast<double>(frame.perception.target_horizontal_distance_sq));
+    frame_stats.set("enemy_ai.perception.vertical_delta_px",
+                    frame.perception.target_vertical_delta_px);
     frame_stats.set("enemy_ai.return_home_fallback_count", frame.feedback.return_home_fallback_count);
     frame_stats.set("enemy_ai.attack_window_enter_count", frame.feedback.attack_window_enter_count);
     frame_stats.set("enemy_ai.attack_window_exit_count", frame.feedback.attack_window_exit_count);
@@ -283,6 +361,9 @@ EnemyAiFrame LegacyEnemyAiAdapter::tick(Asset& self,
     if (debug_logging) {
         vibble::log::info("[AICombat] '" + self_name + "' pipeline phase=" + phase_name(state.mode) +
                           " route=" + route_name(frame.navigation.route) +
+                          " goal=" + internal::movement_goal_kind_name(state.active_movement_goal.kind) +
+                          " goal_status=" +
+                          internal::movement_goal_status_name(state.last_movement_result.status) +
                           " moved=" + std::to_string(frame.feedback.moved));
     }
 

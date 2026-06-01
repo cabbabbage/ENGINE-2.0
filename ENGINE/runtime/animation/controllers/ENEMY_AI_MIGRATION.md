@@ -53,3 +53,19 @@ This migration defines the canonical enemy controller contract after the 2026 cl
   - `bomb.asset_type = "enemy"`
   - `small_spider.asset_type = "enemy"`
 
+
+## Shared Enemy AI Pipeline
+
+New archetype migrations should route through `shared/enemy_ai/enemy_ai_pipeline` before custom controller-specific attack code. The pipeline deliberately separates each frame into independently inspectable stages:
+
+1. **Perception** - target validity, room eligibility, distance, self/home positions, and frame time.
+2. **Intent selection** - phase choice plus attack-window enter/exit transitions.
+3. **Positioning** - whether the enemy should seek standoff, face, retreat, or return home.
+4. **Navigation** - route type and movement config/combat overrides for the chosen positioning request.
+5. **Locomotion animation** - whether movement is allowed and whether movement may coexist with attacking.
+6. **Attack commitment** - whether the controller is committed to a target and may fire a manual attack.
+7. **Result feedback** - movement result, no-progress counters, attack-window counters, recovery, and fallback state.
+
+`LegacyEnemyAiAdapter` keeps existing controller behavior intact by applying the separated frame through the current `ControllerAgentSystem` movement helpers. This allows one archetype to migrate at a time while older controllers continue to call `run_enemy_behavior(...)` unchanged.
+
+Current first migrated archetype: `spider_controller`.

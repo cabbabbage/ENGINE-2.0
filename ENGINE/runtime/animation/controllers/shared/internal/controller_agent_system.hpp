@@ -38,6 +38,10 @@ struct BehaviorState {
     MovementGoalResult last_movement_result{};
     int movement_goal_change_count = 0;
     std::string last_movement_goal_reason{};
+    EnemyAgentPhase durable_intent_phase = EnemyAgentPhase::Idle;
+    std::chrono::steady_clock::time_point durable_intent_until{};
+    std::string durable_intent_reason{};
+    int intent_transition_count = 0;
 };
 
 class ControllerAgentSystem {
@@ -74,6 +78,16 @@ public:
 
         if (state.mode == EnemyAgentPhase::Recover && now < state.recover_until) {
             decision.phase = EnemyAgentPhase::Recover;
+            return decision;
+        }
+
+        const bool preserving_attack_window =
+            state.mode == EnemyAgentPhase::AttackWindow && now < state.attack_window_until;
+        const long long attack_exit_radius = static_cast<long long>(attack_radius_px + 12);
+        const long long attack_exit_radius_sq = attack_exit_radius * attack_exit_radius;
+        if (preserving_attack_window && target_dist_sq <= attack_exit_radius_sq) {
+            decision.phase = EnemyAgentPhase::AttackWindow;
+            decision.target_should_be_committed = true;
             return decision;
         }
 

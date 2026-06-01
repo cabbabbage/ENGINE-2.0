@@ -1,6 +1,7 @@
 #include "frog_controller.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "animation/controllers/shared/enemy_archetype_controller.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -10,7 +11,6 @@ namespace {
 
 constexpr int kThreatRangePx = 96;
 constexpr int kSafeDistancePx = 220;
-constexpr int kRandomStepMinPx = 24;
 constexpr int kRandomStepMaxPx = 72;
 constexpr int kIdleFramesMin = 20;
 constexpr int kIdleFramesMax = 100;
@@ -99,39 +99,14 @@ void frog_controller::random_wander_away_bias(const Asset& player) {
         return;
     }
 
-    std::uniform_real_distribution<double> noise(-0.55, 0.55);
-    std::uniform_int_distribution<int> step_dist(kRandomStepMinPx, kRandomStepMaxPx);
-
-    const int away_x = self->world_x() - player.world_x();
-    const int away_z = self->world_z() - player.world_z();
-    double vx = static_cast<double>(away_x);
-    double vz = static_cast<double>(away_z);
-    const double base_len = std::sqrt(vx * vx + vz * vz);
-    if (base_len < 0.001) {
-        std::uniform_real_distribution<double> dir(-1.0, 1.0);
-        vx = dir(rng_);
-        vz = dir(rng_);
-    }
-
-    const double len = std::sqrt(std::max(0.0001, vx * vx + vz * vz));
-    vx /= len;
-    vz /= len;
-
-    vx += noise(rng_);
-    vz += noise(rng_);
-
-    const double noisy_len = std::sqrt(std::max(0.0001, vx * vx + vz * vz));
-    vx /= noisy_len;
-    vz /= noisy_len;
-
-    const int step = step_dist(rng_);
-    const axis::WorldPos target{
-        self->world_x() + static_cast<int>(std::lround(vx * step)),
-        self->world_y(),
-        self->world_z() + static_cast<int>(std::lround(vz * step))};
+    const axis::WorldPos target = custom_controller_api::enemy_archetypes::SkittishCritterEnemy::choose_safe_position(
+        axis::WorldPos{self->world_x(), self->world_y(), self->world_z()},
+        axis::WorldPos{player.world_x(), player.world_y(), player.world_z()},
+        custom_controller_api::enemy_archetypes::EnemyArchetypePresets::frog(),
+        rng_);
 
     custom_controller_api::MovementConfig move_cfg{};
     move_cfg.visit_threshold_px = 8;
     move_cfg.override_non_locked = false;
-    (void)move_toward(target, step, move_cfg);
+    (void)move_toward(target, kRandomStepMaxPx, move_cfg);
 }

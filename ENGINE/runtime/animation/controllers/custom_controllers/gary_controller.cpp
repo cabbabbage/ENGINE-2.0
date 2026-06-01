@@ -8,7 +8,7 @@ void gary_controller::on_update(const Input& in) {
     Asset* player = resolve_target_player();
     (void)run_wander_behavior(player, 500, -500, 500);
     if (player) {
-        apply_attack_hit(*player);
+        (void)try_attack_target(*player, "gary_primary", 1.0f, 72, "attack");
     }
 }
 

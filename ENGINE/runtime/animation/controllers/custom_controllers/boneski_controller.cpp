@@ -1,25 +1,14 @@
 #include "boneski_controller.hpp"
 
 #include "assets/asset/Asset.hpp"
+#include "animation/controllers/shared/enemy_archetype_controller.hpp"
 
 boneski_controller::boneski_controller(Asset* self)
     : custom_controller_api::CustomControllerBase(self) {
-    behavior_config_.kamikaze = false;
-    behavior_config_.ranges.aggro_radius_px = 240;
-    behavior_config_.ranges.desired_standoff_px = 10;
-    behavior_config_.ranges.attack_radius_px = 74;
-    behavior_config_.retreat_distance_px = 220;
-    behavior_config_.recover_ms = 430;
-    behavior_config_.attack_window_ms = 220;
-    behavior_config_.return_home_threshold_px = 110;
-    behavior_config_.force_attacking_enabled = true;
-
-    chase_move_.visit_threshold_px = 12;
-    chase_move_.override_non_locked = true;
-    chase_move_.allow_vertical_movement = false;
-    retreat_move_.visit_threshold_px = 12;
-    retreat_move_.override_non_locked = true;
-    retreat_move_.allow_vertical_movement = false;
+    const auto preset = custom_controller_api::enemy_archetypes::EnemyArchetypePresets::boneski();
+    behavior_config_ = preset.behavior;
+    chase_move_ = preset.approach_move;
+    retreat_move_ = preset.retreat_move;
 
     Asset* owner = controller_self();
     if (owner && owner->anim_) {
@@ -54,10 +43,13 @@ void boneski_controller::on_update(const Input& in) {
         ai_config);
     if (player && last_ai_frame_.attack.manual_attack_allowed) {
         (void)face_target(*player);
+        const auto profile = custom_controller_api::enemy_archetypes::EnemyArchetypePresets::boneski().primary_attack;
         (void)try_attack_target(*player,
-                                "boneski_primary",
-                                0.7f,
-                                behavior_config_.ranges.attack_radius_px + 24,
-                                "attack_right");
+                                profile.id,
+                                static_cast<float>(profile.cooldown_ms_on_start) / 1000.0f,
+                                profile.max_range_px,
+                                profile.animation_id,
+                                profile.required_tags,
+                                profile.excluded_tags);
     }
 }
